@@ -1,27 +1,33 @@
 # TopSpeed executable (SDL2 mode)
 # Note: For SDL2 mode, we exclude MFC-dependent files and use Main_SDL2.cpp instead
 
+# Core game logic (platform-independent)
 set(TOPSPEED_SOURCES
-    # Core game logic (platform-independent)
     Car.cpp
     ComputerPlayer.cpp
     Game.cpp
     Level.cpp
-    LevelMultiplayer.cpp
     LevelSingleRace.cpp
     LevelTimeTrial.cpp
     Menu.cpp
-    NetworkPlayer.cpp
-    RaceClient.cpp
     RaceInput.cpp
-    RaceServer.cpp
     RaceSettings.cpp
     Track.cpp
 
     # SDL2 entry point (replaces MFC TopSpeed.cpp/TopSpeedDlg.cpp)
     Main_SDL2.cpp
-    StdAfx.cpp
 )
+
+# Windows-only files (multiplayer uses DirectPlay, StdAfx is MSVC precompiled header)
+if(NOT EMSCRIPTEN)
+    list(APPEND TOPSPEED_SOURCES
+        LevelMultiplayer.cpp
+        NetworkPlayer.cpp
+        RaceClient.cpp
+        RaceServer.cpp
+        StdAfx.cpp
+    )
+endif()
 
 if(EMSCRIPTEN)
     # Emscripten: no WIN32 subsystem, no resource file
