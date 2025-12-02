@@ -932,9 +932,27 @@ Int Sound::play(UInt priority, Boolean looped)
     if (!data || !data->pcmData)
         return dxFailed;
 
-    // Stop any existing playback
+    // Check if our stored channel is still valid and owned by us
     if (data->channel >= 0)
-        stop();
+    {
+        AudioChannel* ch = AudioMixer::instance()->getChannel(data->channel);
+        if (ch && ch->active && ch->owner == this)
+        {
+            // Sound is still playing on this channel
+            if (looped)
+            {
+                // For looped sounds, restart from beginning
+                stop();
+            }
+            // For non-looped, allocate a new channel (allows overlapping playback)
+            // Don't stop the existing one - let it finish naturally
+        }
+        else
+        {
+            // Channel finished or was reused by another sound - clear our stale reference
+            data->channel = -1;
+        }
+    }
 
     // Allocate a mixer channel
     data->channel = AudioMixer::instance()->allocateChannel(
@@ -963,7 +981,13 @@ Int Sound::stop()
     if (!data || data->channel < 0)
         return dxSuccess;
 
-    AudioMixer::instance()->freeChannel(data->channel);
+    // Verify we still own this channel before stopping it
+    // (channel may have been reused by another sound after we finished)
+    AudioChannel* ch = AudioMixer::instance()->getChannel(data->channel);
+    if (ch && ch->owner == this)
+    {
+        AudioMixer::instance()->freeChannel(data->channel);
+    }
     data->channel = -1;
     return dxSuccess;
 }
@@ -984,7 +1008,13 @@ Boolean Sound::playing()
     SDL2SoundData* data = GetSDL2Data(this);
     if (!data || data->channel < 0)
         return false;
-    return AudioMixer::instance()->isChannelActive(data->channel);
+
+    // Verify we still own this channel (it may have been reused)
+    AudioChannel* ch = AudioMixer::instance()->getChannel(data->channel);
+    if (!ch || ch->owner != this)
+        return false;
+
+    return ch->active;
 }
 
 //-----------------------------------------------------------------------------
