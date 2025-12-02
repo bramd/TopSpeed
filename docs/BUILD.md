@@ -87,8 +87,10 @@ TopSpeed/
 ## Dependencies
 
 Managed automatically by vcpkg:
-- **SDL2** - Window management, input, timing
-- **SDL2_mixer** - Audio playback with OGG/Vorbis support
+- **SDL2** - Window management, input, audio, timing
+
+Note: SDL2_mixer is no longer required. Audio is handled by a custom mixer using
+SDL2's low-level audio API with SDL_AudioStream for real-time pitch control.
 
 ## Build Configurations
 
@@ -119,7 +121,7 @@ Install the "C++ MFC for latest v143 build tools" component via VS Installer.
 ### SDL2 linking errors
 vcpkg should handle this automatically. Try:
 ```powershell
-vcpkg install sdl2:x64-windows sdl2-mixer[libvorbis]:x64-windows
+vcpkg install sdl2:x64-windows
 ```
 
 ### CMake preset not found
@@ -129,7 +131,7 @@ Ensure you're using CMake 3.21+ and your IDE supports CMake presets (VS2022 17.0
 
 1. **Graphics**: 3D rendering is stubbed out. The game runs in audio-only mode.
 2. **Multiplayer**: DirectPlay networking is disabled.
-3. **Pitch/Frequency**: SDL2_mixer doesn't support real-time pitch control (affects engine sounds).
+3. **OGG/Vorbis**: Currently only WAV files are supported (OGG support can be added via libvorbis).
 
 ## Legacy DirectX 8 Build
 
