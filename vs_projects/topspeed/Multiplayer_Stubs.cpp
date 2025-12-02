@@ -53,7 +53,7 @@ UInt RaceServer::nRacers() { return 0; }
 // RaceClient stubs
 // =============================================================================
 
-RaceClient::RaceClient(Game* game) : m_game(game), m_menu(nullptr), m_client(nullptr), m_playerNumber(0), m_playerId(0), m_nrOfLaps(0), m_trackSelected(false), m_nResults(0), m_prevPlayerState(PlayerState::waiting), m_playerState(PlayerState::waiting), m_connected(false), m_startRace(false), m_sessionLost(false), m_forceDisconnected(false), m_raceAborted(false), m_playerBumped(false), m_playerBumpX(0), m_playerBumpY(0), m_playerBumpSpeed(0)
+RaceClient::RaceClient(Game* game) : m_game(game), m_menu(nullptr), m_client(nullptr), m_playerNumber(0), m_playerId(0), m_nrOfLaps(0), m_trackSelected(false), m_nResults(0), m_prevPlayerState(PlayerState::undefined), m_playerState(PlayerState::undefined), m_connected(false), m_startRace(false), m_sessionLost(false), m_forceDisconnected(false), m_raceAborted(false), m_playerBumped(false), m_playerBumpX(0), m_playerBumpY(0), m_playerBumpSpeed(0)
 {
     m_track[0] = '\0';
     for (int i = 0; i < NMAXPLAYERS; i++) {
@@ -65,7 +65,7 @@ RaceClient::RaceClient(Game* game) : m_game(game), m_menu(nullptr), m_client(nul
     }
 }
 
-RaceClient::RaceClient(Menu* menu) : m_game(nullptr), m_menu(menu), m_client(nullptr), m_playerNumber(0), m_playerId(0), m_nrOfLaps(0), m_trackSelected(false), m_nResults(0), m_prevPlayerState(PlayerState::waiting), m_playerState(PlayerState::waiting), m_connected(false), m_startRace(false), m_sessionLost(false), m_forceDisconnected(false), m_raceAborted(false), m_playerBumped(false), m_playerBumpX(0), m_playerBumpY(0), m_playerBumpSpeed(0)
+RaceClient::RaceClient(Menu* menu) : m_game(nullptr), m_menu(menu), m_client(nullptr), m_playerNumber(0), m_playerId(0), m_nrOfLaps(0), m_trackSelected(false), m_nResults(0), m_prevPlayerState(PlayerState::undefined), m_playerState(PlayerState::undefined), m_connected(false), m_startRace(false), m_sessionLost(false), m_forceDisconnected(false), m_raceAborted(false), m_playerBumped(false), m_playerBumpX(0), m_playerBumpY(0), m_playerBumpSpeed(0)
 {
     m_track[0] = '\0';
     for (int i = 0; i < NMAXPLAYERS; i++) {
@@ -110,7 +110,7 @@ void RaceClient::sendPacket(PacketBase* packet, UInt size, Boolean secure) {}
 // =============================================================================
 
 LevelMultiplayer::LevelMultiplayer(Game* game, UInt nrOfLaps, Char* track, Track::TrackData trackData, Boolean automaticTransmission, UInt vehicle, Char* vehicleFile)
-    : Level(game, nrOfLaps, track, trackData, automaticTransmission, vehicle, vehicleFile), m_isServer(false), m_updateClient(0.0f), m_lastComment(0.0f), m_position(0), m_infoKeyReleased(false), m_startPressed(false)
+    : Level(game, track, trackData, automaticTransmission, nrOfLaps, vehicle, vehicleFile), m_isServer(false), m_updateClient(0.0f), m_lastComment(0.0f), m_position(0), m_infoKeyReleased(false), m_startPressed(false)
 {
     m_soundYouAre = nullptr;
     m_soundPlayer = nullptr;
