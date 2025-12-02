@@ -9,7 +9,9 @@
 
 #ifdef TOPSPEED_USE_SDL2
 
+#ifndef __EMSCRIPTEN__
 #include "stdafx.h"
+#endif
 #include "Game.h"
 #include <SDL.h>
 #include <Common/If/File.h>
