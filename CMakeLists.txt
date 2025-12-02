@@ -38,6 +38,6 @@ else()
 endif()
 
 # Add subdirectories in dependency order
-add_subdirectory(vs_projects/common)
-add_subdirectory(vs_projects/dxcommon)
+add_subdirectory(vs_projects/Common)
+add_subdirectory(vs_projects/DxCommon)
 add_subdirectory(vs_projects/topspeed)

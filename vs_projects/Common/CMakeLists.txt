@@ -1,23 +1,23 @@
 # Common static library
 # Platform-independent sources
 set(COMMON_SOURCES
-    src/Algorithm.cpp
-    src/File.cpp
-    src/Tracer.cpp
+    Src/Algorithm.cpp
+    Src/File.cpp
+    Src/Tracer.cpp
 )
 
 if(EMSCRIPTEN)
     # WASM: Add stub implementations for Windows-specific functionality
     list(APPEND COMMON_SOURCES
-        src/Common_Emscripten.cpp
+        Src/Common_Emscripten.cpp
     )
 else()
     # Windows: Full implementations
     list(APPEND COMMON_SOURCES
-        src/Common.cpp
-        src/Mutex.cpp
-        src/Network.cpp
-        src/Window.cpp
+        Src/Common.cpp
+        Src/Mutex.cpp
+        Src/Network.cpp
+        Src/Window.cpp
     )
 endif()
 
