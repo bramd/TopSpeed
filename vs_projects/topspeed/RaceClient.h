@@ -7,7 +7,7 @@
 #ifndef __RACING_RACECLIENT_H__
 #define __RACING_RACECLIENT_H__
 
-#ifndef TOPSPEED_DISABLE_MULTIPLAYER
+#ifndef __EMSCRIPTEN__
 #include <DxCommon/If/Network.h>
 #else
 #include "Multiplayer_Stubs.h"
@@ -18,7 +18,7 @@
 class Game;
 class Menu;
 
-#ifndef TOPSPEED_DISABLE_MULTIPLAYER
+#ifndef __EMSCRIPTEN__
 class RaceClient : public DirectX::IClient
 #else
 class RaceClient
@@ -86,7 +86,7 @@ private:
     UInt                m_playerId;
     Game*               m_game;
     Menu*               m_menu;
-#ifndef TOPSPEED_DISABLE_MULTIPLAYER
+#ifndef __EMSCRIPTEN__
     DirectX::Client*    m_client;
 #else
     void*               m_client;

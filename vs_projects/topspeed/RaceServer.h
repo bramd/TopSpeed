@@ -7,7 +7,7 @@
 #ifndef __RACING_RACESERVER_H__
 #define __RACING_RACESERVER_H__
 
-#ifndef TOPSPEED_DISABLE_MULTIPLAYER
+#ifndef __EMSCRIPTEN__
 #include <DxCommon/If/Network.h>
 #include <map>
 #else
@@ -25,7 +25,7 @@ class Game;
 
 
 
-#ifndef TOPSPEED_DISABLE_MULTIPLAYER
+#ifndef __EMSCRIPTEN__
 class RaceServer : public DirectX::IServer
 #else
 class RaceServer
@@ -78,17 +78,17 @@ public:
 private:
     UInt        nRacers( );
 private:
-#ifndef TOPSPEED_DISABLE_MULTIPLAYER
+#ifndef __EMSCRIPTEN__
     typedef std::map<UInt, PlayerData>   TPlayerDataMap;
 #endif
     Game*                           m_game;
-#ifndef TOPSPEED_DISABLE_MULTIPLAYER
+#ifndef __EMSCRIPTEN__
     DirectX::Server*                m_server;
 #else
     void*                           m_server;
 #endif
     Mutex                           m_mutex;
-#ifndef TOPSPEED_DISABLE_MULTIPLAYER
+#ifndef __EMSCRIPTEN__
     TPlayerDataMap                  m_playerMap;
 #endif
     Float                           m_lastUpdateTime;

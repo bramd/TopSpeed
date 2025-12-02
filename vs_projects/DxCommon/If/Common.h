@@ -22,7 +22,9 @@
 #include <DxCommon/If/D3DSprite.h>
 #include <DxCommon/If/Particle.h>
 #include <DxCommon/If/Music.h>
+#ifndef __EMSCRIPTEN__
 #include <DxCommon/If/Network.h>
+#endif
 
 
 #endif /* __DXCOMMON_COMMON_H__ */

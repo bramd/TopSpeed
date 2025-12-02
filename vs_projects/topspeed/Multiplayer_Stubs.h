@@ -11,7 +11,7 @@
 #ifndef __MULTIPLAYER_STUBS_H__
 #define __MULTIPLAYER_STUBS_H__
 
-#ifdef TOPSPEED_DISABLE_MULTIPLAYER
+#ifdef __EMSCRIPTEN__
 
 #ifndef MAX_PATH
 #define MAX_PATH 260
@@ -45,6 +45,6 @@ public:
 
 } // namespace DirectX
 
-#endif // TOPSPEED_DISABLE_MULTIPLAYER
+#endif // __EMSCRIPTEN__
 
 #endif // __MULTIPLAYER_STUBS_H__

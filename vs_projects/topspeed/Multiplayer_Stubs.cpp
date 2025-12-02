@@ -8,7 +8,7 @@
 * (e.g., Emscripten/WASM builds)
 */
 
-#ifdef TOPSPEED_DISABLE_MULTIPLAYER
+#ifdef __EMSCRIPTEN__
 
 #include "RaceServer.h"
 #include "RaceClient.h"
@@ -144,4 +144,4 @@ void LevelMultiplayer::onCrash() {}
 void LevelMultiplayer::comment(Boolean automatic) {}
 void LevelMultiplayer::updateResults() {}
 
-#endif // TOPSPEED_DISABLE_MULTIPLAYER
+#endif // __EMSCRIPTEN__
