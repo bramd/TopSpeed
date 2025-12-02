@@ -54,7 +54,7 @@ public:
 
 public:
     _dxcommon_  void        setIServer(IServer* server)     { m_iServer = server;       }
-    _dxcommon_  void        setGUID(GUID& guid)             { m_applicationGUID = guid; }
+    _dxcommon_  void        setGUID(const GUID& guid)       { m_applicationGUID = guid; }
 
 
 public:
@@ -122,7 +122,7 @@ private:
 
 public:
     _dxcommon_  void        setIClient(IClient* client)     { m_iClient = client;       }
-    _dxcommon_  void        setGUID(GUID& guid)             { m_applicationGUID = guid; }
+    _dxcommon_  void        setGUID(const GUID& guid)       { m_applicationGUID = guid; }
 
 public:
     static HRESULT WINAPI   directPlayMessageHandler(void* pvUserContext, DWORD dwMessageId, void* pMsgBuffer);

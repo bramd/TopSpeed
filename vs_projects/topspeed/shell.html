@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Top Speed 3</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #1a1a2e;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    #game-container {
+      position: relative;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+
+    #canvas {
+      display: block;
+    }
+
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      cursor: pointer;
+      transition: opacity 0.3s ease;
+    }
+
+    #overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #overlay h1 {
+      font-size: 3em;
+      margin-bottom: 0.5em;
+      text-shadow: 0 0 20px rgba(255,255,255,0.3);
+    }
+
+    #overlay p {
+      font-size: 1.2em;
+      opacity: 0.8;
+      margin-bottom: 2em;
+    }
+
+    #start-button {
+      background: #4a9eff;
+      color: #fff;
+      border: none;
+      padding: 1em 3em;
+      font-size: 1.2em;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    #start-button:hover {
+      background: #3a8eef;
+      transform: scale(1.05);
+    }
+
+    #start-button:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+
+    #loading {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+    }
+
+    #loading.hidden {
+      display: none;
+    }
+
+    #loading h2 {
+      margin-bottom: 1em;
+    }
+
+    #progress-container {
+      width: 300px;
+      height: 20px;
+      background: #333;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    #progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #4a9eff, #7b68ee);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    #progress-text {
+      margin-top: 0.5em;
+      opacity: 0.7;
+    }
+
+    /* Accessibility: Focus styles */
+    #start-button:focus {
+      outline: 3px solid #fff;
+      outline-offset: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <!-- Loading screen -->
+    <div id="loading">
+      <h2>Top Speed 3</h2>
+      <div id="progress-container">
+        <div id="progress-bar"></div>
+      </div>
+      <p id="progress-text">Loading...</p>
+    </div>
+
+    <!-- Game canvas -->
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+    <!-- Click to start overlay -->
+    <div id="overlay">
+      <h1>Top Speed 3</h1>
+      <p>Audio-based racing game</p>
+      <button id="start-button" disabled>Loading...</button>
+    </div>
+  </div>
+
+  <script>
+    // Module configuration for Emscripten
+    var Module = {
+      canvas: (function() {
+        var canvas = document.getElementById('canvas');
+        return canvas;
+      })(),
+
+      // Called when runtime is ready
+      onRuntimeInitialized: function() {
+        console.log('WASM Runtime initialized');
+        document.getElementById('loading').classList.add('hidden');
+        var btn = document.getElementById('start-button');
+        btn.disabled = false;
+        btn.textContent = 'Click to Start';
+      },
+
+      // Progress callback during loading
+      setStatus: function(text) {
+        var progressText = document.getElementById('progress-text');
+        var progressBar = document.getElementById('progress-bar');
+
+        if (progressText) {
+          progressText.textContent = text || 'Ready';
+        }
+
+        // Parse progress from text like "Downloading data... (X/Y)"
+        var match = text.match(/\((\d+)\/(\d+)\)/);
+        if (match && progressBar) {
+          var progress = (parseInt(match[1]) / parseInt(match[2])) * 100;
+          progressBar.style.width = progress + '%';
+        }
+      },
+
+      // Print to console
+      print: function(text) {
+        console.log(text);
+      },
+
+      printErr: function(text) {
+        console.error(text);
+      },
+
+      // Don't run main() automatically - wait for user click
+      noInitialRun: true
+    };
+
+    // Handle click to start
+    var started = false;
+
+    function startGame() {
+      if (started) return;
+      started = true;
+
+      console.log('Starting game...');
+
+      // Hide overlay
+      document.getElementById('overlay').classList.add('hidden');
+
+      // Focus canvas for keyboard input
+      document.getElementById('canvas').focus();
+
+      // Resume audio context if suspended
+      if (typeof SDL !== 'undefined' && SDL.audioContext) {
+        SDL.audioContext.resume().then(function() {
+          console.log('Audio context resumed');
+        });
+      }
+
+      // Call main() to start the game
+      if (typeof Module.callMain === 'function') {
+        Module.callMain();
+      } else if (typeof Module._main === 'function') {
+        Module._main();
+      }
+    }
+
+    // Event listeners
+    document.getElementById('start-button').addEventListener('click', startGame);
+    document.getElementById('overlay').addEventListener('click', function(e) {
+      if (!document.getElementById('start-button').disabled) {
+        startGame();
+      }
+    });
+
+    // Also allow Enter/Space to start
+    document.addEventListener('keydown', function(e) {
+      if ((e.key === 'Enter' || e.key === ' ') && !started && !document.getElementById('start-button').disabled) {
+        e.preventDefault();
+        startGame();
+      }
+    });
+  </script>
+
+  {{{ SCRIPT }}}
+</body>
+</html>

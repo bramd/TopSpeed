@@ -7,6 +7,7 @@
 #ifndef __COMMON_TYPES_H__
 #define __COMMON_TYPES_H__
 
+#include <cstdint>
 
 typedef bool                      Boolean;
 typedef long                      Long;
@@ -18,8 +19,8 @@ typedef unsigned short            UShort;
 typedef char                      Byte;
 typedef unsigned char             UByte;
 typedef char                      Char;
-typedef signed __int64            Huge; 
-typedef unsigned __int64          UHuge; 
+typedef int64_t                   Huge;
+typedef uint64_t                  UHuge;
 typedef double                    Double;
 typedef float                     Float;
 

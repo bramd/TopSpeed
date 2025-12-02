@@ -7,8 +7,13 @@
 #include <Common/If/Tracer.h>
 
 #include <stdio.h>
+#include <stdarg.h>
+#include <string.h>
+
+#ifndef __EMSCRIPTEN__
 #include <windows.h>
 #include <tchar.h> // _vsntprintf
+#endif
 
 
 Tracer::Tracer(const Char name[] ) :
@@ -41,7 +46,7 @@ void Tracer::trace(const Char* fmt, ...)
         sprintf(buffer, "[%s] ", m_name);
         va_list args;
         va_start(args, fmt);
-        _vsntprintf( buffer + strlen(buffer), 512, fmt, args );
+        vsnprintf(buffer + strlen(buffer), 512 - strlen(buffer), fmt, args);
         sprintf(buffer + strlen(buffer), "\n");
         va_end(args);
         if (m_file)

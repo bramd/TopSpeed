@@ -21,13 +21,22 @@ public:
     _common_ virtual ~Mutex( );
     //@}
 public:
-    _common_ void       lock( );
-    _common_ void       unlock( );
+    // Note: renamed from lock/unlock to enter/leave to match implementation
+    _common_ void       enter( );
+    _common_ void       leave( );
+    // Aliases for compatibility
+    void lock() { enter(); }
+    void unlock() { leave(); }
 
 public:
     class Guard;
 private:
+#ifdef __EMSCRIPTEN__
+    // No mutex needed - single threaded in WASM
+    int m_dummy;
+#else
     CRITICAL_SECTION    m_criticalSection;
+#endif
 };
 
 
@@ -35,7 +44,7 @@ class Mutex::Guard
 {
 public:
     Guard(Mutex& mutex) : m_mutex(mutex)    { m_mutex.lock( );      }
-    ~Guard( )                               { m_mutex.unlock( );    }  
+    ~Guard( )                               { m_mutex.unlock( );    }
     Mutex::Guard& operator= (const Mutex::Guard&) { return *this; }
 private:
     Mutex&  m_mutex;

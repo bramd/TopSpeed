@@ -20,8 +20,13 @@
 
 #ifdef TOPSPEED_USE_SDL2
 // SDL2 mode: No MFC dependency - use Windows SDK directly
+#ifdef __EMSCRIPTEN__
+// Emscripten: Include SDL2Compat.h for Windows type stubs
+#include <DxCommon/If/SDL2Compat.h>
+#else
 #include <windows.h>
 #include <tchar.h>
+#endif
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>

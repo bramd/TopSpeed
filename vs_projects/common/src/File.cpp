@@ -8,6 +8,27 @@
 #include <Common/If/Algorithm.h>
 #include <string>
 #include <iostream>
+#include <cstdio>
+#include <cstring>
+
+// Portable alternatives for Windows-specific functions
+#ifndef _WIN32
+#ifndef MAX_PATH
+#define MAX_PATH 260
+#endif
+
+// sprintf_s replacement - just use snprintf
+#define sprintf_s(buf, ...) snprintf(buf, sizeof(buf), __VA_ARGS__)
+
+// fscanf_s replacement - just use fscanf (the _s versions add buffer sizes for strings)
+#define fscanf_s fscanf
+
+// strncpy_s replacement
+inline void strncpy_s(char* dest, const char* src, size_t count) {
+    strncpy(dest, src, count);
+    if (count > 0) dest[count - 1] = '\0';
+}
+#endif
 
 File::File(const Char filename[], UInt flags) :
     m_file(0),

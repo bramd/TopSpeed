@@ -7,6 +7,49 @@
 #ifndef __COMMON_WINDOW_H__
 #define __COMMON_WINDOW_H__
 
+#ifdef __EMSCRIPTEN__
+// Emscripten/WASM: No windowing system needed
+// Browser handles the window, we just need type stubs
+
+class Window;
+class MessageBox;
+
+class Window
+{
+public:
+    typedef void*     Handle;
+    typedef void*     Instance;
+    typedef UInt      (*MessageHandler)(Handle, UInt, UInt, Int);
+
+public:
+    _common_ Window( ) : m_handle(nullptr) {}
+    _common_ virtual ~Window( ) {}
+
+public:
+    _common_ void create(Instance, void*, Int, Int, Int, const Char*) {}
+    _common_ Boolean handleMessages( ) { return true; }
+
+public:
+    _common_ void show( ) {}
+    _common_ void hide( ) {}
+
+public:
+    Handle handle( ) const { return m_handle; }
+
+private:
+    Handle          m_handle;
+};
+
+class Messagebox
+{
+public:
+    _common_ Messagebox(Window::Handle, Char*, Char*) {}
+    _common_ virtual ~Messagebox( ) {}
+};
+
+#else
+// Windows: Full implementation
+
 #include <windows.h>
 
 class Window;
@@ -50,6 +93,6 @@ public:
     _common_ virtual ~Messagebox( );
 };
 
-
+#endif // __EMSCRIPTEN__
 
 #endif /* __COMMON_WINDOW_H__ */
