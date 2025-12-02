@@ -10,6 +10,8 @@
 #ifndef TOPSPEED_DISABLE_MULTIPLAYER
 #include <DxCommon/If/Network.h>
 #include <map>
+#else
+#include "Multiplayer_Stubs.h"
 #endif
 #include <Common/If/Mutex.h>
 #include "Packets.h"

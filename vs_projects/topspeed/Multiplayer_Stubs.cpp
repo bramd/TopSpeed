@@ -84,7 +84,7 @@ void RaceClient::finalize() {}
 void RaceClient::startEnumSessions(char* ipAddress) {}
 void RaceClient::stopEnumSessions() {}
 UInt RaceClient::nSessions() { return 0; }
-// session() method is guarded by #ifndef TOPSPEED_DISABLE_MULTIPLAYER in header
+UInt RaceClient::session(UInt i, DirectX::Client::SessionInfo& info) { return 1; /* always fail - no sessions */ }
 UInt RaceClient::joinSession(UInt session) { return 0; }
 UInt RaceClient::joinSessionAt(Char* ipAddress) { return 0; }
 void RaceClient::sendData(PlayerData data, Boolean secure) {}

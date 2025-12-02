@@ -9,6 +9,8 @@
 
 #ifndef TOPSPEED_DISABLE_MULTIPLAYER
 #include <DxCommon/If/Network.h>
+#else
+#include "Multiplayer_Stubs.h"
 #endif
 #include <Common/If/Mutex.h>
 #include "Packets.h"
@@ -33,9 +35,7 @@ public:
     void startEnumSessions(char* ipAddress = 0);
     void stopEnumSessions( );
     UInt nSessions( );
-#ifndef TOPSPEED_DISABLE_MULTIPLAYER
     UInt session(UInt i, DirectX::Client::SessionInfo& info);
-#endif
     UInt joinSession(UInt session);
     UInt joinSessionAt(Char* ipAddress);
     void sendData(PlayerData data, Boolean secure = false);
