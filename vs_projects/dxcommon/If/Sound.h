@@ -12,10 +12,8 @@
 #ifdef TOPSPEED_USE_SDL2
 #include <DxCommon/If/SDL2Compat.h>
 #include <SDL.h>
-#include <SDL_mixer.h>
-// Forward declare Mix_Chunk for SDL2 Sound constructor
-struct Mix_Chunk;
 // Forward declarations for SDL2 audio mixer
+struct SDL2SoundData;
 class AudioMixer;
 struct AudioChannel;
 #else
@@ -115,7 +113,7 @@ public:
 #endif
 #ifdef TOPSPEED_USE_SDL2
     // SDL2-specific constructor
-    _dxcommon_ Sound(Mix_Chunk* chunk, bool is3d);
+    _dxcommon_ Sound(struct SDL2SoundData* data);
 #endif
     _dxcommon_ virtual ~Sound();
 

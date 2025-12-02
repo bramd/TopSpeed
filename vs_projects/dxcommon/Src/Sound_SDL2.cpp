@@ -228,7 +228,7 @@ struct AudioChannel
     float pan;               // -1.0 (left) to +1.0 (right)
 
     // Owner tracking (for callback when channel finishes)
-    class Sound* owner;
+    DirectX::Sound* owner;
 
     AudioChannel()
         : sourceData(nullptr)
@@ -336,7 +336,7 @@ public:
     }
 
     // Allocate a channel for a sound
-    int allocateChannel(Sound* owner, const Uint8* data, Uint32 length,
+    int allocateChannel(DirectX::Sound* owner, const Uint8* data, Uint32 length,
                         int frequency, int channels, SDL_AudioFormat format)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -383,27 +383,24 @@ public:
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
 
-        SDL_LockAudioDevice(m_deviceId);
+        std::lock_guard<std::mutex> lock(m_mutex);
         m_channels[channel].reset();
-        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     void setChannelVolume(int channel, float volume)
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
-        SDL_LockAudioDevice(m_deviceId);
+        std::lock_guard<std::mutex> lock(m_mutex);
         m_channels[channel].volume = volume;
-        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     void setChannelPan(int channel, float pan)
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
-        SDL_LockAudioDevice(m_deviceId);
+        std::lock_guard<std::mutex> lock(m_mutex);
         m_channels[channel].pan = pan;
-        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     void setChannelFrequency(int channel, int frequency)
@@ -450,15 +447,15 @@ public:
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
-        SDL_LockAudioDevice(m_deviceId);
+        std::lock_guard<std::mutex> lock(m_mutex);
         m_channels[channel].looping = looping;
-        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     bool isChannelActive(int channel)
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return false;
+        std::lock_guard<std::mutex> lock(m_mutex);
         return m_channels[channel].active;
     }
 
@@ -466,9 +463,8 @@ public:
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
-        SDL_LockAudioDevice(m_deviceId);
+        std::lock_guard<std::mutex> lock(m_mutex);
         m_channels[channel].active = false;
-        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     AudioChannel* getChannel(int channel)
@@ -614,14 +610,84 @@ void SDLCALL AudioMixer::audioCallback(void* userdata, Uint8* stream, int len)
     }
 }
 
+// =============================================================================
+// SDL2SoundData - Internal data for each Sound object
+// =============================================================================
+
+struct SDL2SoundData
+{
+    // Raw PCM data (loaded from WAV)
+    Uint8* pcmData;
+    Uint32 pcmLength;
+    SDL_AudioSpec audioSpec;
+
+    // Playback state
+    int channel;        // -1 = not playing
+    float volume;       // 0.0 to 1.0 (stored for when not playing)
+    float pan;          // -1.0 to +1.0
+    int frequency;      // Target frequency for pitch
+    bool is3d;
+    float posX, posY, posZ;
+
+    SDL2SoundData()
+        : pcmData(nullptr)
+        , pcmLength(0)
+        , channel(-1)
+        , volume(1.0f)
+        , pan(0.0f)
+        , frequency(22050)
+        , is3d(false)
+        , posX(0), posY(0), posZ(0)
+    {
+        SDL_zero(audioSpec);
+    }
+
+    ~SDL2SoundData()
+    {
+        if (pcmData)
+        {
+            SDL_FreeWAV(pcmData);
+            pcmData = nullptr;
+        }
+    }
+};
+
+// Helper to load WAV file
+static SDL2SoundData* loadWavFile(const char* filename)
+{
+    SDL_AudioSpec spec;
+    Uint8* buffer = nullptr;
+    Uint32 length = 0;
+
+    if (!SDL_LoadWAV(filename, &spec, &buffer, &length))
+    {
+        dxTracer.trace("Failed to load WAV: %s - %s", filename, SDL_GetError());
+        return nullptr;
+    }
+
+    SDL2SoundData* data = new SDL2SoundData();
+    data->pcmData = buffer;
+    data->pcmLength = length;
+    data->audioSpec = spec;
+    data->frequency = spec.freq;
+
+    return data;
+}
+
 namespace DirectX
 {
+
+// Helper to get SDL2 data from Sound (uses DirectX::Sound)
+static SDL2SoundData* GetSDL2Data(Sound* sound)
+{
+    if (!sound || !sound->buffer())
+        return nullptr;
+    return reinterpret_cast<SDL2SoundData*>(sound->buffer()[0]);
+}
 
 //-----------------------------------------------------------------------------
 // SoundManager Implementation
 //-----------------------------------------------------------------------------
-
-static bool g_sdlAudioInitialized = false;
 
 SoundManager::SoundManager(::Window::Handle hwnd, UInt nChannels, UInt frequency, UInt bitrate)
     : m_directSound(nullptr)
@@ -630,58 +696,26 @@ SoundManager::SoundManager(::Window::Handle hwnd, UInt nChannels, UInt frequency
     , m_reverseStereo(false)
     , m_3dAlgorithm(AlgoDefault)
 {
-    if (!g_sdlAudioInitialized)
-    {
-        if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0)
-        {
-            dxTracer.trace("SDL_InitSubSystem(AUDIO) failed: %s", SDL_GetError());
-            return;
-        }
-
-        int mixerFlags = MIX_INIT_OGG;
-        if ((Mix_Init(mixerFlags) & mixerFlags) != mixerFlags)
-        {
-            dxTracer.trace("Mix_Init failed: %s", Mix_GetError());
-            return;
-        }
-
-        // Open audio device
-        if (Mix_OpenAudio(frequency, AUDIO_S16SYS, nChannels, 1024) < 0)
-        {
-            dxTracer.trace("Mix_OpenAudio failed: %s", Mix_GetError());
-            return;
-        }
-
-        // Allocate mixing channels (game may need many for sound effects)
-        Mix_AllocateChannels(64);
-
-        g_sdlAudioInitialized = true;
-    }
-    m_created = true;
-    dxTracer.trace("SoundManager: SDL2_mixer initialized (freq=%d, channels=%d)", frequency, nChannels);
+    m_created = AudioMixer::instance()->initialize();
+    if (m_created)
+        dxTracer.trace("SoundManager: AudioMixer initialized");
+    else
+        dxTracer.trace("SoundManager: AudioMixer initialization failed");
 }
 
 SoundManager::~SoundManager()
 {
-    if (g_sdlAudioInitialized)
-    {
-        Mix_CloseAudio();
-        Mix_Quit();
-        SDL_QuitSubSystem(SDL_INIT_AUDIO);
-        g_sdlAudioInitialized = false;
-    }
+    AudioMixer::instance()->shutdown();
 }
 
 Sound* SoundManager::create(Int resource, Boolean enable3d, UInt nBuffers)
 {
-    // Map resource ID to external filename and load from file
     const char* filename = getResourceFilename(resource);
     if (!filename)
     {
         dxTracer.trace("SoundManager::create(resource=%d) - unknown resource ID", resource);
         return nullptr;
     }
-
     return create(const_cast<Char*>(filename), enable3d, nBuffers);
 }
 
@@ -690,22 +724,21 @@ Sound* SoundManager::create(Char* filename, Boolean enable3d, UInt nBuffers)
     if (!filename)
         return nullptr;
 
-    Mix_Chunk* chunk = Mix_LoadWAV(filename);
-    if (!chunk)
-    {
-        dxTracer.trace("Failed to load sound: %s - %s", filename, Mix_GetError());
+    SDL2SoundData* data = loadWavFile(filename);
+    if (!data)
         return nullptr;
-    }
 
-    Sound* sound = new Sound(chunk, enable3d);
+    data->is3d = enable3d;
+
+    Sound* sound = new Sound(data);
     sound->reverseStereo(m_reverseStereo);
-    dxTracer.trace("Loaded sound: %s", filename);
+    dxTracer.trace("Loaded sound: %s (freq=%d, ch=%d)",
+        filename, data->audioSpec.freq, data->audioSpec.channels);
     return sound;
 }
 
 Sound* SoundManager::create(DSBUFFERDESC& bufferDesc, Boolean enable3d, UInt nBuffers)
 {
-    // Buffer-based creation not implemented for SDL2
     dxTracer.trace("SoundManager::create(bufferDesc) - not implemented");
     return nullptr;
 }
@@ -713,21 +746,9 @@ Sound* SoundManager::create(DSBUFFERDESC& bufferDesc, Boolean enable3d, UInt nBu
 #ifdef _USE_VORBIS_
 Sound* SoundManager::createVorbis(Char* filename, Boolean enable3d, UInt nBuffers)
 {
-    // SDL2_mixer handles OGG files natively via Mix_LoadWAV
-    if (!filename)
-        return nullptr;
-
-    Mix_Chunk* chunk = Mix_LoadWAV(filename);
-    if (!chunk)
-    {
-        dxTracer.trace("Failed to load vorbis sound: %s - %s", filename, Mix_GetError());
-        return nullptr;
-    }
-
-    Sound* sound = new Sound(chunk, enable3d);
-    sound->reverseStereo(m_reverseStereo);
-    dxTracer.trace("Loaded vorbis sound: %s", filename);
-    return sound;
+    // SDL_LoadWAV doesn't handle OGG, would need separate implementation
+    // For now, try loading as WAV (some .ogg files might actually be .wav)
+    return create(filename, enable3d, nBuffers);
 }
 #endif
 
@@ -743,28 +764,6 @@ Int SoundManager::listener3DInterface(LPDIRECTSOUND3DLISTENER* listener)
     if (listener)
         *listener = nullptr;
     return dxSuccess;
-}
-
-//-----------------------------------------------------------------------------
-// Sound Implementation - Internal SDL2 Data
-//-----------------------------------------------------------------------------
-
-struct SDL2SoundData
-{
-    Mix_Chunk* chunk;
-    int channel;
-    int volume;      // 0-128 for SDL_mixer
-    int pan;         // -100 to +100
-    bool is3d;
-    float posX, posY, posZ;
-};
-
-// Helper to get SDL2 data from Sound
-static SDL2SoundData* GetSDL2Data(Sound* sound)
-{
-    if (!sound || !sound->buffer())
-        return nullptr;
-    return reinterpret_cast<SDL2SoundData*>(sound->buffer()[0]);
 }
 
 //-----------------------------------------------------------------------------
@@ -814,9 +813,9 @@ Sound::Sound(LPDIRECTSOUNDBUFFER* buffer, UInt bufferSize, UInt nBuffers,
 #endif
 
 // SDL2-specific constructor
-Sound::Sound(Mix_Chunk* chunk, bool is3d)
+Sound::Sound(SDL2SoundData* data)
     : m_buffer(new LPDIRECTSOUNDBUFFER[1])
-    , m_bufferSize(0)
+    , m_bufferSize(data ? data->pcmLength : 0)
     , m_nBuffers(1)
     , m_waveFile(nullptr)
     , m_playInSoftware(false)
@@ -824,41 +823,25 @@ Sound::Sound(Mix_Chunk* chunk, bool is3d)
     , m_buffer3D(nullptr)
     , m_length(0.0f)
 {
-    SDL2SoundData* data = new SDL2SoundData();
-    data->chunk = chunk;
-    data->channel = -1;
-    data->volume = MIX_MAX_VOLUME;
-    data->pan = 0;
-    data->is3d = is3d;
-    data->posX = data->posY = data->posZ = 0.0f;
-
     m_buffer[0] = reinterpret_cast<LPDIRECTSOUNDBUFFER>(data);
 
-    // Calculate length in seconds
-    if (chunk && chunk->alen > 0)
+    if (data && data->pcmLength > 0 && data->audioSpec.freq > 0)
     {
-        // Approximate: assuming 44100Hz, 16-bit stereo
-        m_length = static_cast<float>(chunk->alen) / (44100.0f * 2 * 2);
+        int bytesPerSample = SDL_AUDIO_BITSIZE(data->audioSpec.format) / 8;
+        int bytesPerSecond = data->audioSpec.freq * data->audioSpec.channels * bytesPerSample;
+        if (bytesPerSecond > 0)
+            m_length = static_cast<float>(data->pcmLength) / bytesPerSecond;
     }
 }
 
 Sound::~Sound()
 {
+    stop();
+
     if (m_buffer)
     {
         SDL2SoundData* data = GetSDL2Data(this);
-        if (data)
-        {
-            if (data->channel >= 0)
-            {
-                Mix_HaltChannel(data->channel);
-            }
-            if (data->chunk)
-            {
-                Mix_FreeChunk(data->chunk);
-            }
-            delete data;
-        }
+        delete data;  // SDL2SoundData destructor frees PCM data
         delete[] m_buffer;
         m_buffer = nullptr;
     }
@@ -871,38 +854,30 @@ Sound::~Sound()
 Int Sound::play(UInt priority, Boolean looped)
 {
     SDL2SoundData* data = GetSDL2Data(this);
-    if (!data || !data->chunk)
+    if (!data || !data->pcmData)
         return dxFailed;
 
-    int loops = looped ? -1 : 0;
-    data->channel = Mix_PlayChannel(-1, data->chunk, loops);
+    // Stop any existing playback
+    if (data->channel >= 0)
+        stop();
+
+    // Allocate a mixer channel
+    data->channel = AudioMixer::instance()->allocateChannel(
+        this,
+        data->pcmData,
+        data->pcmLength,
+        data->frequency,
+        data->audioSpec.channels,
+        data->audioSpec.format
+    );
 
     if (data->channel < 0)
-    {
-        dxTracer.trace("Mix_PlayChannel failed: %s", Mix_GetError());
         return dxFailed;
-    }
 
-    // Apply current volume and pan
-    Mix_Volume(data->channel, data->volume);
-
-    // Apply pan (-100 to +100 -> SDL2 panning)
-    int left = 255, right = 255;
-    if (data->pan < 0)
-    {
-        right = 255 + (data->pan * 255 / 100);
-    }
-    else if (data->pan > 0)
-    {
-        left = 255 - (data->pan * 255 / 100);
-    }
-    if (m_reverseStereo < 0)
-    {
-        int tmp = left;
-        left = right;
-        right = tmp;
-    }
-    Mix_SetPanning(data->channel, (Uint8)left, (Uint8)right);
+    // Apply stored settings
+    AudioMixer::instance()->setChannelVolume(data->channel, data->volume);
+    AudioMixer::instance()->setChannelPan(data->channel, data->pan);
+    AudioMixer::instance()->setChannelLooping(data->channel, looped != FALSE);
 
     return dxSuccess;
 }
@@ -913,15 +888,14 @@ Int Sound::stop()
     if (!data || data->channel < 0)
         return dxSuccess;
 
-    Mix_HaltChannel(data->channel);
+    AudioMixer::instance()->freeChannel(data->channel);
     data->channel = -1;
     return dxSuccess;
 }
 
 Int Sound::reset()
 {
-    stop();
-    return dxSuccess;
+    return stop();
 }
 
 Boolean Sound::playing()
@@ -929,8 +903,7 @@ Boolean Sound::playing()
     SDL2SoundData* data = GetSDL2Data(this);
     if (!data || data->channel < 0)
         return false;
-
-    return Mix_Playing(data->channel) != 0;
+    return AudioMixer::instance()->isChannelActive(data->channel);
 }
 
 //-----------------------------------------------------------------------------
@@ -943,50 +916,42 @@ void Sound::pan(Int value)
     if (!data)
         return;
 
-    // Clamp to -100..+100
-    if (value < -100) value = -100;
-    if (value > 100) value = 100;
-    data->pan = value;
+    // Convert -100..+100 to -1.0..+1.0
+    float pan = static_cast<float>(value) / 100.0f;
+    if (pan < -1.0f) pan = -1.0f;
+    if (pan > 1.0f) pan = 1.0f;
+
+    // Apply reverse stereo if needed
+    if (m_reverseStereo < 0)
+        pan = -pan;
+
+    data->pan = pan;
 
     if (data->channel >= 0)
-    {
-        int left = 255, right = 255;
-        if (value < 0)
-        {
-            right = 255 + (value * 255 / 100);
-        }
-        else if (value > 0)
-        {
-            left = 255 - (value * 255 / 100);
-        }
-        if (m_reverseStereo < 0)
-        {
-            int tmp = left;
-            left = right;
-            right = tmp;
-        }
-        Mix_SetPanning(data->channel, (Uint8)left, (Uint8)right);
-    }
+        AudioMixer::instance()->setChannelPan(data->channel, pan);
 }
 
 void Sound::frequency(Int value)
 {
-    // SDL2_mixer does not support frequency/pitch modification
-    // This is a known limitation - noted in design document
-    // Future: implement with SDL2 audio callback and pitch shifting
-    // For now, log but don't spam
-    static bool warned = false;
-    if (!warned)
-    {
-        dxTracer.trace("Sound::frequency() - not implemented in SDL2 (pitch control unavailable)");
-        warned = true;
-    }
+    SDL2SoundData* data = GetSDL2Data(this);
+    if (!data)
+        return;
+
+    if (value < 100) value = 100;      // Minimum frequency
+    if (value > 200000) value = 200000; // Maximum frequency
+
+    data->frequency = value;
+
+    if (data->channel >= 0)
+        AudioMixer::instance()->setChannelFrequency(data->channel, value);
 }
 
 Int Sound::frequency()
 {
-    // Return default frequency
-    return 44100;
+    SDL2SoundData* data = GetSDL2Data(this);
+    if (!data)
+        return 22050;
+    return data->frequency;
 }
 
 void Sound::volume(Int value)
@@ -995,15 +960,15 @@ void Sound::volume(Int value)
     if (!data)
         return;
 
-    // Convert 0-100 to 0-128
-    if (value < 0) value = 0;
-    if (value > 100) value = 100;
-    data->volume = (value * MIX_MAX_VOLUME) / 100;
+    // Convert 0-100 to 0.0-1.0
+    float vol = static_cast<float>(value) / 100.0f;
+    if (vol < 0.0f) vol = 0.0f;
+    if (vol > 1.0f) vol = 1.0f;
+
+    data->volume = vol;
 
     if (data->channel >= 0)
-    {
-        Mix_Volume(data->channel, data->volume);
-    }
+        AudioMixer::instance()->setChannelVolume(data->channel, vol);
 }
 
 Int Sound::volume()
@@ -1011,8 +976,7 @@ Int Sound::volume()
     SDL2SoundData* data = GetSDL2Data(this);
     if (!data)
         return 0;
-
-    return (data->volume * 100) / MIX_MAX_VOLUME;
+    return static_cast<Int>(data->volume * 100.0f);
 }
 
 //-----------------------------------------------------------------------------
@@ -1035,34 +999,21 @@ void Sound::position(Vector3 pos)
     data->posY = pos.y;
     data->posZ = pos.z;
 
-    // Simple 3D audio: pan based on X position, volume based on distance
+    // Simple 3D: pan based on X, volume based on distance
+    float pan = pos.x * 0.1f;
+    if (pan < -1.0f) pan = -1.0f;
+    if (pan > 1.0f) pan = 1.0f;
+    data->pan = pan;
+
+    float dist = std::sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+    float vol = data->volume;
+    if (dist > 1.0f)
+        vol = data->volume / dist;
+
     if (data->channel >= 0)
     {
-        // Pan: map X position to -100..+100 (assuming reasonable range)
-        int panValue = static_cast<int>(pos.x * 10.0f);
-        if (panValue < -100) panValue = -100;
-        if (panValue > 100) panValue = 100;
-
-        int left = 255, right = 255;
-        if (panValue < 0)
-        {
-            right = 255 + (panValue * 255 / 100);
-        }
-        else if (panValue > 0)
-        {
-            left = 255 - (panValue * 255 / 100);
-        }
-        Mix_SetPanning(data->channel, (Uint8)left, (Uint8)right);
-
-        // Distance attenuation
-        float dist = std::sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
-        int vol = data->volume;
-        if (dist > 1.0f)
-        {
-            vol = static_cast<int>(data->volume / dist);
-            if (vol < 0) vol = 0;
-        }
-        Mix_Volume(data->channel, vol);
+        AudioMixer::instance()->setChannelPan(data->channel, pan);
+        AudioMixer::instance()->setChannelVolume(data->channel, vol);
     }
 }
 
