@@ -147,6 +147,45 @@ Int Keyboard::update()
     // Copy to m_keys for compatibility
     std::memcpy(m_keys, m_state.keys, sizeof(m_keys));
 
+    // Map keyboard keys to joystick-like controls for menu navigation
+    // This matches the original DirectInput keyboard behavior
+    m_state.x = 0;
+    m_state.y = 0;
+    m_state.z = 0;
+    m_state.rx = 0;
+    m_state.ry = 0;
+    m_state.rz = 0;
+    m_state.slider1 = 0;
+    m_state.slider2 = 0;
+
+    // Button mappings (matching original Input.cpp)
+    m_state.b1 = sdlKeys[SDL_SCANCODE_RETURN] || sdlKeys[SDL_SCANCODE_KP_ENTER];
+    m_state.b2 = sdlKeys[SDL_SCANCODE_RSHIFT] != 0;
+    m_state.b3 = sdlKeys[SDL_SCANCODE_RALT] != 0;
+    m_state.b4 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b5 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b6 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b7 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b8 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b9 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b10 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b11 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b12 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b13 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b14 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b15 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+    m_state.b16 = sdlKeys[SDL_SCANCODE_SPACE] != 0;
+
+    // POV (D-pad) mappings from arrow keys (matching original Input.cpp)
+    m_state.pov1 = sdlKeys[SDL_SCANCODE_UP] != 0;
+    m_state.pov2 = sdlKeys[SDL_SCANCODE_RIGHT] != 0;
+    m_state.pov3 = sdlKeys[SDL_SCANCODE_DOWN] != 0;
+    m_state.pov4 = sdlKeys[SDL_SCANCODE_LEFT] != 0;
+    m_state.pov5 = sdlKeys[SDL_SCANCODE_UP] != 0;
+    m_state.pov6 = sdlKeys[SDL_SCANCODE_RIGHT] != 0;
+    m_state.pov7 = sdlKeys[SDL_SCANCODE_DOWN] != 0;
+    m_state.pov8 = sdlKeys[SDL_SCANCODE_LEFT] != 0;
+
     return dxSuccess;
 }
 
@@ -418,11 +457,39 @@ const Input::State InputManager::state()
     Input::State combined;
     std::memset(&combined, 0, sizeof(combined));
 
+    // Get keyboard state (includes button/POV mappings from arrow keys)
     if (m_keyboard)
     {
-        std::memcpy(combined.keys, m_keyboard->state().keys, sizeof(combined.keys));
+        const Input::State& kb = m_keyboard->state();
+        std::memcpy(combined.keys, kb.keys, sizeof(combined.keys));
+        // Copy keyboard button/POV mappings
+        combined.b1 = kb.b1;
+        combined.b2 = kb.b2;
+        combined.b3 = kb.b3;
+        combined.b4 = kb.b4;
+        combined.b5 = kb.b5;
+        combined.b6 = kb.b6;
+        combined.b7 = kb.b7;
+        combined.b8 = kb.b8;
+        combined.b9 = kb.b9;
+        combined.b10 = kb.b10;
+        combined.b11 = kb.b11;
+        combined.b12 = kb.b12;
+        combined.b13 = kb.b13;
+        combined.b14 = kb.b14;
+        combined.b15 = kb.b15;
+        combined.b16 = kb.b16;
+        combined.pov1 = kb.pov1;
+        combined.pov2 = kb.pov2;
+        combined.pov3 = kb.pov3;
+        combined.pov4 = kb.pov4;
+        combined.pov5 = kb.pov5;
+        combined.pov6 = kb.pov6;
+        combined.pov7 = kb.pov7;
+        combined.pov8 = kb.pov8;
     }
 
+    // Merge joystick state (OR with keyboard so either input works)
     if (m_joystick)
     {
         const Input::State& js = m_joystick->state();
@@ -434,30 +501,30 @@ const Input::State InputManager::state()
         combined.rz = js.rz;
         combined.slider1 = js.slider1;
         combined.slider2 = js.slider2;
-        combined.b1 = js.b1;
-        combined.b2 = js.b2;
-        combined.b3 = js.b3;
-        combined.b4 = js.b4;
-        combined.b5 = js.b5;
-        combined.b6 = js.b6;
-        combined.b7 = js.b7;
-        combined.b8 = js.b8;
-        combined.b9 = js.b9;
-        combined.b10 = js.b10;
-        combined.b11 = js.b11;
-        combined.b12 = js.b12;
-        combined.b13 = js.b13;
-        combined.b14 = js.b14;
-        combined.b15 = js.b15;
-        combined.b16 = js.b16;
-        combined.pov1 = js.pov1;
-        combined.pov2 = js.pov2;
-        combined.pov3 = js.pov3;
-        combined.pov4 = js.pov4;
-        combined.pov5 = js.pov5;
-        combined.pov6 = js.pov6;
-        combined.pov7 = js.pov7;
-        combined.pov8 = js.pov8;
+        combined.b1 = combined.b1 || js.b1;
+        combined.b2 = combined.b2 || js.b2;
+        combined.b3 = combined.b3 || js.b3;
+        combined.b4 = combined.b4 || js.b4;
+        combined.b5 = combined.b5 || js.b5;
+        combined.b6 = combined.b6 || js.b6;
+        combined.b7 = combined.b7 || js.b7;
+        combined.b8 = combined.b8 || js.b8;
+        combined.b9 = combined.b9 || js.b9;
+        combined.b10 = combined.b10 || js.b10;
+        combined.b11 = combined.b11 || js.b11;
+        combined.b12 = combined.b12 || js.b12;
+        combined.b13 = combined.b13 || js.b13;
+        combined.b14 = combined.b14 || js.b14;
+        combined.b15 = combined.b15 || js.b15;
+        combined.b16 = combined.b16 || js.b16;
+        combined.pov1 = combined.pov1 || js.pov1;
+        combined.pov2 = combined.pov2 || js.pov2;
+        combined.pov3 = combined.pov3 || js.pov3;
+        combined.pov4 = combined.pov4 || js.pov4;
+        combined.pov5 = combined.pov5 || js.pov5;
+        combined.pov6 = combined.pov6 || js.pov6;
+        combined.pov7 = combined.pov7 || js.pov7;
+        combined.pov8 = combined.pov8 || js.pov8;
     }
 
     return combined;

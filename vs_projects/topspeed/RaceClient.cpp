@@ -19,6 +19,8 @@ RaceClient::RaceClient(Game* game) :
     m_raceAborted(false),
     m_startRace(false),
     m_playerBumped(false),
+    m_sessionLost(false),
+    m_forceDisconnected(false),
     m_prevPlayerState(undefined),
     m_playerState(undefined)
 {

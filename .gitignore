@@ -24,6 +24,9 @@ installer/tspeed/*.trc
 installer/tspeed/*.cfg
 installer/tspeed/*.bin
 
+# Copied sound assets (originals are in vs_projects/topspeed/Sounds/)
+installer/tspeed/Sounds/*.wav
+
 # vcpkg installed packages (managed by vcpkg.json)
 vcpkg_installed/
 
