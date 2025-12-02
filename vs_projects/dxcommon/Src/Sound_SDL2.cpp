@@ -930,7 +930,10 @@ Int Sound::play(UInt priority, Boolean looped)
 {
     SDL2SoundData* data = GetSDL2Data(this);
     if (!data || !data->pcmData)
+    {
+        dxTracer.trace("Sound::play FAILED - no data or pcmData");
         return dxFailed;
+    }
 
     // Check if our stored channel is still valid and owned by us
     if (data->channel >= 0)
@@ -942,6 +945,7 @@ Int Sound::play(UInt priority, Boolean looped)
             if (looped)
             {
                 // For looped sounds, restart from beginning
+                dxTracer.trace("Sound::play - stopping looped sound to restart");
                 stop();
             }
             // For non-looped, allocate a new channel (allows overlapping playback)
@@ -955,6 +959,7 @@ Int Sound::play(UInt priority, Boolean looped)
     }
 
     // Allocate a mixer channel
+    int oldChannel = data->channel;
     data->channel = AudioMixer::instance()->allocateChannel(
         this,
         data->pcmData,
@@ -965,7 +970,13 @@ Int Sound::play(UInt priority, Boolean looped)
     );
 
     if (data->channel < 0)
+    {
+        dxTracer.trace("Sound::play FAILED - no free channel (was ch %d)", oldChannel);
         return dxFailed;
+    }
+
+    dxTracer.trace("Sound::play OK - allocated ch %d, len=%u, freq=%d, vol=%.2f",
+        data->channel, data->pcmLength, data->frequency, data->volume);
 
     // Apply stored settings
     AudioMixer::instance()->setChannelVolume(data->channel, data->volume, this);
@@ -986,7 +997,12 @@ Int Sound::stop()
     AudioChannel* ch = AudioMixer::instance()->getChannel(data->channel);
     if (ch && ch->owner == this)
     {
+        dxTracer.trace("Sound::stop - freeing ch %d (active=%d)", data->channel, ch->active ? 1 : 0);
         AudioMixer::instance()->freeChannel(data->channel);
+    }
+    else
+    {
+        dxTracer.trace("Sound::stop - ch %d not owned by us, skipping", data->channel);
     }
     data->channel = -1;
     return dxSuccess;
