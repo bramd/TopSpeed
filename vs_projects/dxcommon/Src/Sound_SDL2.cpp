@@ -10,6 +10,7 @@
 #include <DxCommon/If/Sound.h>
 #include <Common/If/Tracer.h>
 #include <SDL.h>
+#include <algorithm>
 #include <cstring>
 #include <cmath>
 #include <vector>
@@ -382,22 +383,27 @@ public:
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
 
-        std::lock_guard<std::mutex> lock(m_mutex);
+        SDL_LockAudioDevice(m_deviceId);
         m_channels[channel].reset();
+        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     void setChannelVolume(int channel, float volume)
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
+        SDL_LockAudioDevice(m_deviceId);
         m_channels[channel].volume = volume;
+        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     void setChannelPan(int channel, float pan)
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
+        SDL_LockAudioDevice(m_deviceId);
         m_channels[channel].pan = pan;
+        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     void setChannelFrequency(int channel, int frequency)
@@ -405,12 +411,20 @@ public:
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
 
+        SDL_LockAudioDevice(m_deviceId);
+
         AudioChannel& ch = m_channels[channel];
         if (!ch.active || !ch.stream)
+        {
+            SDL_UnlockAudioDevice(m_deviceId);
             return;
+        }
 
         if (frequency == ch.targetFrequency)
+        {
+            SDL_UnlockAudioDevice(m_deviceId);
             return;
+        }
 
         ch.targetFrequency = frequency;
 
@@ -422,13 +436,23 @@ public:
             ch.sourceFormat, ch.sourceChannels, frequency,
             m_deviceFormat, m_deviceChannels, m_deviceFrequency
         );
+
+        if (!ch.stream)
+        {
+            dxTracer.trace("AudioMixer: Failed to recreate AudioStream for frequency change: %s", SDL_GetError());
+            ch.active = false;
+        }
+
+        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     void setChannelLooping(int channel, bool looping)
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
+        SDL_LockAudioDevice(m_deviceId);
         m_channels[channel].looping = looping;
+        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     bool isChannelActive(int channel)
@@ -442,7 +466,9 @@ public:
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
+        SDL_LockAudioDevice(m_deviceId);
         m_channels[channel].active = false;
+        SDL_UnlockAudioDevice(m_deviceId);
     }
 
     AudioChannel* getChannel(int channel)
@@ -475,6 +501,7 @@ private:
     SDL_AudioFormat m_deviceFormat;
     AudioChannel m_channels[MAX_CHANNELS];
     std::mutex m_mutex;
+    float m_tempBuffer[8192];  // Thread-safe buffer for audio callback
 };
 
 // =============================================================================
@@ -490,8 +517,9 @@ void SDLCALL AudioMixer::audioCallback(void* userdata, Uint8* stream, int len)
     // Clear output buffer
     memset(stream, 0, len);
 
-    // Temporary buffer for channel audio
-    static float tempBuffer[4096];
+    // Use member buffer for thread safety (no static variable)
+    float* tempBuffer = mixer->m_tempBuffer;
+    int maxTempBytes = sizeof(mixer->m_tempBuffer);
 
     for (int i = 0; i < MAX_CHANNELS; i++)
     {
@@ -538,8 +566,9 @@ void SDLCALL AudioMixer::audioCallback(void* userdata, Uint8* stream, int len)
             }
         }
 
-        // Get resampled audio from stream
-        int got = SDL_AudioStreamGet(ch.stream, tempBuffer, len);
+        // Get resampled audio from stream (ensure we don't overflow tempBuffer)
+        int requestBytes = (len < maxTempBytes) ? len : maxTempBytes;
+        int got = SDL_AudioStreamGet(ch.stream, tempBuffer, requestBytes);
         if (got <= 0)
         {
             // No more audio available
@@ -563,8 +592,9 @@ void SDLCALL AudioMixer::audioCallback(void* userdata, Uint8* stream, int len)
             right *= ch.volume;
 
             // Apply pan (-1 = full left, +1 = full right)
-            float leftGain = (ch.pan <= 0) ? 1.0f : (1.0f - ch.pan);
-            float rightGain = (ch.pan >= 0) ? 1.0f : (1.0f + ch.pan);
+            // Use proper linear panning: at center (0), both channels are full volume
+            float leftGain = 1.0f - (std::max)(0.0f, ch.pan);   // 1.0 at left, 0.0 at right
+            float rightGain = 1.0f + (std::min)(0.0f, ch.pan);  // 0.0 at left, 1.0 at right
             left *= leftGain;
             right *= rightGain;
 
