@@ -76,8 +76,13 @@ if(EMSCRIPTEN)
         "SHELL:--preload-file ${GAME_ASSETS_DIR}/Sounds/en/tracks@/Sounds/en/tracks"
         # Preload vehicle names (needed for menu)
         "SHELL:--preload-file ${GAME_ASSETS_DIR}/Sounds/en/vehicles@/Sounds/en/vehicles"
+        # Preload race sounds (copilot callouts, countdown, etc.)
+        "SHELL:--preload-file ${GAME_ASSETS_DIR}/Sounds/en/race@/Sounds/en/race"
         # Preload English language identifier
         "SHELL:--preload-file ${GAME_ASSETS_DIR}/Sounds/en.ogg@/Sounds/en.ogg"
+        # Preload game data files
+        "SHELL:--preload-file ${GAME_ASSETS_DIR}/Tracks@/Tracks"
+        "SHELL:--preload-file ${GAME_ASSETS_DIR}/Vehicles@/Vehicles"
     )
 else()
     target_compile_definitions(TopSpeed PRIVATE
