@@ -15,6 +15,9 @@
 #include <SDL_mixer.h>
 // Forward declare Mix_Chunk for SDL2 Sound constructor
 struct Mix_Chunk;
+// Forward declarations for SDL2 audio mixer
+class AudioMixer;
+struct AudioChannel;
 #else
 #define DIRECTSOUND_VERSION 0x1000
 #include <mmsystem.h>

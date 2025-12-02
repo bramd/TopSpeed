@@ -3,14 +3,17 @@
  * Copyright 2003-2013 Playing in the Dark (http://playinginthedark.net)
  * SDL2 port 2025
  *
- * This program is distributed under the terms of the GNU General Public License version 3.
+ * Custom audio mixer with pitch control via SDL_AudioStream resampling.
  */
 #ifdef TOPSPEED_USE_SDL2
 
 #include <DxCommon/If/Sound.h>
 #include <Common/If/Tracer.h>
+#include <SDL.h>
 #include <cstring>
 #include <cmath>
+#include <vector>
+#include <mutex>
 
 // Resource IDs from TopSpeed resource.h - needed for lookup table
 #define IDR_PITD_LOGO                   131
@@ -99,6 +102,10 @@
 #define IDR_OWL                         226
 
 extern Tracer dxTracer;
+
+// =============================================================================
+// Resource ID to filename lookup table (from previous implementation)
+// =============================================================================
 
 // Lookup table: map resource IDs to external filenames
 static const char* getResourceFilename(int resourceId)
@@ -191,6 +198,389 @@ static const char* getResourceFilename(int resourceId)
     case IDR_OWL:          return "Sounds/owl.wav";
     default:
         return nullptr;
+    }
+}
+
+// =============================================================================
+// AudioChannel - represents one playing sound with pitch/volume/pan control
+// =============================================================================
+
+struct AudioChannel
+{
+    // Source audio data (owned by Sound, not AudioChannel)
+    const Uint8* sourceData;
+    Uint32 sourceLength;
+    Uint32 sourcePosition;
+    int sourceFrequency;     // Original sample rate (e.g., 22050)
+    int sourceChannels;      // 1 = mono, 2 = stereo
+    SDL_AudioFormat sourceFormat;
+
+    // Playback state
+    bool active;
+    bool looping;
+    bool paused;
+
+    // Audio processing
+    SDL_AudioStream* stream;
+    int targetFrequency;     // Current pitch target (e.g., 44100 for 2x pitch)
+    float volume;            // 0.0 to 1.0
+    float pan;               // -1.0 (left) to +1.0 (right)
+
+    // Owner tracking (for callback when channel finishes)
+    class Sound* owner;
+
+    AudioChannel()
+        : sourceData(nullptr)
+        , sourceLength(0)
+        , sourcePosition(0)
+        , sourceFrequency(22050)
+        , sourceChannels(2)
+        , sourceFormat(AUDIO_S16SYS)
+        , active(false)
+        , looping(false)
+        , paused(false)
+        , stream(nullptr)
+        , targetFrequency(22050)
+        , volume(1.0f)
+        , pan(0.0f)
+        , owner(nullptr)
+    {}
+
+    void reset()
+    {
+        if (stream)
+        {
+            SDL_FreeAudioStream(stream);
+            stream = nullptr;
+        }
+        sourceData = nullptr;
+        sourceLength = 0;
+        sourcePosition = 0;
+        active = false;
+        looping = false;
+        paused = false;
+        owner = nullptr;
+    }
+};
+
+// =============================================================================
+// AudioMixer - manages audio device and mixes all active channels
+// =============================================================================
+
+class AudioMixer
+{
+public:
+    static const int MAX_CHANNELS = 64;
+    static const int DEVICE_FREQUENCY = 44100;
+    static const int DEVICE_CHANNELS = 2;
+    static const int DEVICE_SAMPLES = 1024;
+
+    static AudioMixer* instance()
+    {
+        static AudioMixer s_instance;
+        return &s_instance;
+    }
+
+    bool initialize()
+    {
+        if (m_initialized)
+            return true;
+
+        if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0)
+        {
+            dxTracer.trace("AudioMixer: SDL_InitSubSystem(AUDIO) failed: %s", SDL_GetError());
+            return false;
+        }
+
+        SDL_AudioSpec desired, obtained;
+        SDL_zero(desired);
+        desired.freq = DEVICE_FREQUENCY;
+        desired.format = AUDIO_F32SYS;
+        desired.channels = DEVICE_CHANNELS;
+        desired.samples = DEVICE_SAMPLES;
+        desired.callback = audioCallback;
+        desired.userdata = this;
+
+        m_deviceId = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
+        if (m_deviceId == 0)
+        {
+            dxTracer.trace("AudioMixer: SDL_OpenAudioDevice failed: %s", SDL_GetError());
+            return false;
+        }
+
+        m_deviceFrequency = obtained.freq;
+        m_deviceChannels = obtained.channels;
+        m_deviceFormat = obtained.format;
+
+        // Unpause the audio device to start playback
+        SDL_PauseAudioDevice(m_deviceId, 0);
+
+        m_initialized = true;
+        dxTracer.trace("AudioMixer: Initialized (freq=%d, channels=%d)", m_deviceFrequency, m_deviceChannels);
+        return true;
+    }
+
+    void shutdown()
+    {
+        if (!m_initialized)
+            return;
+
+        SDL_CloseAudioDevice(m_deviceId);
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+
+        for (int i = 0; i < MAX_CHANNELS; i++)
+            m_channels[i].reset();
+
+        m_initialized = false;
+    }
+
+    // Allocate a channel for a sound
+    int allocateChannel(Sound* owner, const Uint8* data, Uint32 length,
+                        int frequency, int channels, SDL_AudioFormat format)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        for (int i = 0; i < MAX_CHANNELS; i++)
+        {
+            if (!m_channels[i].active)
+            {
+                AudioChannel& ch = m_channels[i];
+                ch.reset();
+                ch.sourceData = data;
+                ch.sourceLength = length;
+                ch.sourcePosition = 0;
+                ch.sourceFrequency = frequency;
+                ch.sourceChannels = channels;
+                ch.sourceFormat = format;
+                ch.targetFrequency = frequency;
+                ch.active = true;
+                ch.owner = owner;
+
+                // Create audio stream for resampling
+                ch.stream = SDL_NewAudioStream(
+                    format, channels, frequency,
+                    m_deviceFormat, m_deviceChannels, m_deviceFrequency
+                );
+
+                if (!ch.stream)
+                {
+                    dxTracer.trace("AudioMixer: Failed to create AudioStream: %s", SDL_GetError());
+                    ch.active = false;
+                    return -1;
+                }
+
+                return i;
+            }
+        }
+
+        dxTracer.trace("AudioMixer: No free channels available");
+        return -1;
+    }
+
+    void freeChannel(int channel)
+    {
+        if (channel < 0 || channel >= MAX_CHANNELS)
+            return;
+
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_channels[channel].reset();
+    }
+
+    void setChannelVolume(int channel, float volume)
+    {
+        if (channel < 0 || channel >= MAX_CHANNELS)
+            return;
+        m_channels[channel].volume = volume;
+    }
+
+    void setChannelPan(int channel, float pan)
+    {
+        if (channel < 0 || channel >= MAX_CHANNELS)
+            return;
+        m_channels[channel].pan = pan;
+    }
+
+    void setChannelFrequency(int channel, int frequency)
+    {
+        if (channel < 0 || channel >= MAX_CHANNELS)
+            return;
+
+        AudioChannel& ch = m_channels[channel];
+        if (!ch.active || !ch.stream)
+            return;
+
+        if (frequency == ch.targetFrequency)
+            return;
+
+        ch.targetFrequency = frequency;
+
+        // Recreate the audio stream with new frequency ratio
+        // SDL_AudioStream resamples from source to device rate
+        // To change pitch, we change the "source" rate
+        SDL_FreeAudioStream(ch.stream);
+        ch.stream = SDL_NewAudioStream(
+            ch.sourceFormat, ch.sourceChannels, frequency,
+            m_deviceFormat, m_deviceChannels, m_deviceFrequency
+        );
+    }
+
+    void setChannelLooping(int channel, bool looping)
+    {
+        if (channel < 0 || channel >= MAX_CHANNELS)
+            return;
+        m_channels[channel].looping = looping;
+    }
+
+    bool isChannelActive(int channel)
+    {
+        if (channel < 0 || channel >= MAX_CHANNELS)
+            return false;
+        return m_channels[channel].active;
+    }
+
+    void stopChannel(int channel)
+    {
+        if (channel < 0 || channel >= MAX_CHANNELS)
+            return;
+        m_channels[channel].active = false;
+    }
+
+    AudioChannel* getChannel(int channel)
+    {
+        if (channel < 0 || channel >= MAX_CHANNELS)
+            return nullptr;
+        return &m_channels[channel];
+    }
+
+private:
+    AudioMixer()
+        : m_initialized(false)
+        , m_deviceId(0)
+        , m_deviceFrequency(DEVICE_FREQUENCY)
+        , m_deviceChannels(DEVICE_CHANNELS)
+        , m_deviceFormat(AUDIO_F32SYS)
+    {}
+
+    ~AudioMixer()
+    {
+        shutdown();
+    }
+
+    static void SDLCALL audioCallback(void* userdata, Uint8* stream, int len);
+
+    bool m_initialized;
+    SDL_AudioDeviceID m_deviceId;
+    int m_deviceFrequency;
+    int m_deviceChannels;
+    SDL_AudioFormat m_deviceFormat;
+    AudioChannel m_channels[MAX_CHANNELS];
+    std::mutex m_mutex;
+};
+
+// =============================================================================
+// Audio callback - called by SDL2 to fill the audio buffer
+// =============================================================================
+
+void SDLCALL AudioMixer::audioCallback(void* userdata, Uint8* stream, int len)
+{
+    AudioMixer* mixer = static_cast<AudioMixer*>(userdata);
+    float* output = reinterpret_cast<float*>(stream);
+    int samples = len / sizeof(float);
+
+    // Clear output buffer
+    memset(stream, 0, len);
+
+    // Temporary buffer for channel audio
+    static float tempBuffer[4096];
+
+    for (int i = 0; i < MAX_CHANNELS; i++)
+    {
+        AudioChannel& ch = mixer->m_channels[i];
+        if (!ch.active || ch.paused || !ch.stream)
+            continue;
+
+        // Feed source data to the stream if needed
+        int available = SDL_AudioStreamAvailable(ch.stream);
+        int needed = len * 2;  // Request more than we need to keep stream fed
+
+        while (available < needed && ch.sourcePosition < ch.sourceLength)
+        {
+            // Calculate how much source data to feed
+            int bytesToFeed = ch.sourceLength - ch.sourcePosition;
+            if (bytesToFeed > 4096)
+                bytesToFeed = 4096;
+
+            int result = SDL_AudioStreamPut(ch.stream,
+                ch.sourceData + ch.sourcePosition, bytesToFeed);
+
+            if (result < 0)
+            {
+                dxTracer.trace("AudioMixer: SDL_AudioStreamPut failed: %s", SDL_GetError());
+                break;
+            }
+
+            ch.sourcePosition += bytesToFeed;
+            available = SDL_AudioStreamAvailable(ch.stream);
+
+            // Handle looping
+            if (ch.sourcePosition >= ch.sourceLength)
+            {
+                if (ch.looping)
+                {
+                    ch.sourcePosition = 0;
+                }
+                else
+                {
+                    // Signal end of stream
+                    SDL_AudioStreamFlush(ch.stream);
+                    break;
+                }
+            }
+        }
+
+        // Get resampled audio from stream
+        int got = SDL_AudioStreamGet(ch.stream, tempBuffer, len);
+        if (got <= 0)
+        {
+            // No more audio available
+            if (ch.sourcePosition >= ch.sourceLength && !ch.looping)
+            {
+                ch.active = false;
+            }
+            continue;
+        }
+
+        int gotSamples = got / sizeof(float);
+
+        // Apply volume and pan, mix into output
+        for (int j = 0; j < gotSamples; j += 2)
+        {
+            float left = tempBuffer[j];
+            float right = (j + 1 < gotSamples) ? tempBuffer[j + 1] : left;
+
+            // Apply volume
+            left *= ch.volume;
+            right *= ch.volume;
+
+            // Apply pan (-1 = full left, +1 = full right)
+            float leftGain = (ch.pan <= 0) ? 1.0f : (1.0f - ch.pan);
+            float rightGain = (ch.pan >= 0) ? 1.0f : (1.0f + ch.pan);
+            left *= leftGain;
+            right *= rightGain;
+
+            // Mix into output (additive mixing)
+            if (j < samples)
+                output[j] += left;
+            if (j + 1 < samples)
+                output[j + 1] += right;
+        }
+    }
+
+    // Clamp output to prevent clipping
+    for (int i = 0; i < samples; i++)
+    {
+        if (output[i] > 1.0f) output[i] = 1.0f;
+        if (output[i] < -1.0f) output[i] = -1.0f;
     }
 }
 
