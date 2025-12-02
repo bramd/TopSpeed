@@ -1,0 +1,88 @@
+name: Build and Deploy WASM
+
+on:
+  push:
+    branches: [master, feature/cmake-sdl2-migration]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+# Sets permissions for GitHub Pages deployment
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '3.1.51'
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Verify Emscripten
+        run: |
+          emcc --version
+          ninja --version
+
+      - name: Configure CMake
+        run: |
+          emcmake cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build --target TopSpeed --parallel
+
+      - name: Prepare deployment
+        run: |
+          mkdir -p deploy
+          cp build/vs_projects/topspeed/TopSpeed.html deploy/index.html
+          cp build/vs_projects/topspeed/TopSpeed.js deploy/
+          cp build/vs_projects/topspeed/TopSpeed.wasm deploy/
+          cp build/vs_projects/topspeed/TopSpeed.data deploy/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TopSpeed-WASM
+          path: deploy/
+          retention-days: 30
+
+      - name: Setup Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: deploy/
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
