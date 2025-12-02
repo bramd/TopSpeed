@@ -278,7 +278,7 @@ struct AudioChannel
 class AudioMixer
 {
 public:
-    static const int MAX_CHANNELS = 64;
+    static const int MAX_CHANNELS = 128;
     static const int DEVICE_FREQUENCY = 44100;
     static const int DEVICE_CHANNELS = 2;
     static const int DEVICE_SAMPLES = 1024;
