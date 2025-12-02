@@ -16,6 +16,10 @@
 #include <vector>
 #include <mutex>
 
+// stb_vorbis for OGG file loading
+#define STB_VORBIS_HEADER_ONLY
+#include "stb_vorbis.c"
+
 // Resource IDs from TopSpeed resource.h - needed for lookup table
 #define IDR_PITD_LOGO                   131
 #define IDR_VEHICLE1B                   133
@@ -210,10 +214,9 @@ struct AudioChannel
 {
     // Source audio data (owned by Sound, not AudioChannel)
     const Uint8* sourceData;
-    Uint32 sourceLength;
-    Uint32 sourcePosition;
-    int sourceFrequency;     // Original sample rate (e.g., 22050)
-    int sourceChannels;      // 1 = mono, 2 = stereo
+    Uint32 sourceLength;       // Length in bytes
+    int sourceFrequency;       // Original sample rate (e.g., 22050)
+    int sourceChannels;        // 1 = mono, 2 = stereo
     SDL_AudioFormat sourceFormat;
 
     // Playback state
@@ -221,11 +224,11 @@ struct AudioChannel
     bool looping;
     bool paused;
 
-    // Audio processing
-    SDL_AudioStream* stream;
-    int targetFrequency;     // Current pitch target (e.g., 44100 for 2x pitch)
-    float volume;            // 0.0 to 1.0
-    float pan;               // -1.0 (left) to +1.0 (right)
+    // Audio processing - use floating point position for smooth pitch shifting
+    double position;           // Current position in SOURCE SAMPLES (not bytes), fractional for interpolation
+    double pitchRatio;         // Ratio of playback rate: 1.0 = normal, 2.0 = double speed/pitch
+    float volume;              // 0.0 to 1.0
+    float pan;                 // -1.0 (left) to +1.0 (right)
 
     // Owner tracking (for callback when channel finishes)
     DirectX::Sound* owner;
@@ -233,15 +236,14 @@ struct AudioChannel
     AudioChannel()
         : sourceData(nullptr)
         , sourceLength(0)
-        , sourcePosition(0)
         , sourceFrequency(22050)
         , sourceChannels(2)
         , sourceFormat(AUDIO_S16SYS)
         , active(false)
         , looping(false)
         , paused(false)
-        , stream(nullptr)
-        , targetFrequency(22050)
+        , position(0.0)
+        , pitchRatio(1.0)
         , volume(1.0f)
         , pan(0.0f)
         , owner(nullptr)
@@ -249,18 +251,23 @@ struct AudioChannel
 
     void reset()
     {
-        if (stream)
-        {
-            SDL_FreeAudioStream(stream);
-            stream = nullptr;
-        }
         sourceData = nullptr;
         sourceLength = 0;
-        sourcePosition = 0;
+        position = 0.0;
+        pitchRatio = 1.0;
+        volume = 1.0f;
+        pan = 0.0f;
         active = false;
         looping = false;
         paused = false;
         owner = nullptr;
+    }
+
+    // Get total samples in source (per channel)
+    int getTotalSamples() const
+    {
+        int bytesPerSample = (sourceFormat == AUDIO_S16SYS || sourceFormat == AUDIO_S16LSB) ? 2 : 4;
+        return sourceLength / (bytesPerSample * sourceChannels);
     }
 };
 
@@ -349,26 +356,14 @@ public:
                 ch.reset();
                 ch.sourceData = data;
                 ch.sourceLength = length;
-                ch.sourcePosition = 0;
                 ch.sourceFrequency = frequency;
                 ch.sourceChannels = channels;
                 ch.sourceFormat = format;
-                ch.targetFrequency = frequency;
+                ch.position = 0.0;
+                // Calculate initial pitch ratio based on source vs device sample rate
+                ch.pitchRatio = (double)frequency / (double)m_deviceFrequency;
                 ch.active = true;
                 ch.owner = owner;
-
-                // Create audio stream for resampling
-                ch.stream = SDL_NewAudioStream(
-                    format, channels, frequency,
-                    m_deviceFormat, m_deviceChannels, m_deviceFrequency
-                );
-
-                if (!ch.stream)
-                {
-                    dxTracer.trace("AudioMixer: Failed to create AudioStream: %s", SDL_GetError());
-                    ch.active = false;
-                    return -1;
-                }
 
                 return i;
             }
@@ -387,60 +382,46 @@ public:
         m_channels[channel].reset();
     }
 
-    void setChannelVolume(int channel, float volume)
+    void setChannelVolume(int channel, float volume, DirectX::Sound* owner)
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
         std::lock_guard<std::mutex> lock(m_mutex);
-        m_channels[channel].volume = volume;
+        AudioChannel& ch = m_channels[channel];
+        if (!ch.active || ch.owner != owner)
+            return;
+        ch.volume = volume;
     }
 
-    void setChannelPan(int channel, float pan)
+    void setChannelPan(int channel, float pan, DirectX::Sound* owner)
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
         std::lock_guard<std::mutex> lock(m_mutex);
-        m_channels[channel].pan = pan;
+        AudioChannel& ch = m_channels[channel];
+        if (!ch.active || ch.owner != owner)
+            return;
+        ch.pan = pan;
     }
 
-    void setChannelFrequency(int channel, int frequency)
+    void setChannelFrequency(int channel, int frequency, DirectX::Sound* owner)
     {
         if (channel < 0 || channel >= MAX_CHANNELS)
             return;
 
-        SDL_LockAudioDevice(m_deviceId);
+        std::lock_guard<std::mutex> lock(m_mutex);
 
         AudioChannel& ch = m_channels[channel];
-        if (!ch.active || !ch.stream)
-        {
-            SDL_UnlockAudioDevice(m_deviceId);
+        if (!ch.active)
             return;
-        }
 
-        if (frequency == ch.targetFrequency)
-        {
-            SDL_UnlockAudioDevice(m_deviceId);
+        // Verify ownership - channel may have been reallocated to a different Sound
+        if (ch.owner != owner)
             return;
-        }
 
-        ch.targetFrequency = frequency;
-
-        // Recreate the audio stream with new frequency ratio
-        // SDL_AudioStream resamples from source to device rate
-        // To change pitch, we change the "source" rate
-        SDL_FreeAudioStream(ch.stream);
-        ch.stream = SDL_NewAudioStream(
-            ch.sourceFormat, ch.sourceChannels, frequency,
-            m_deviceFormat, m_deviceChannels, m_deviceFrequency
-        );
-
-        if (!ch.stream)
-        {
-            dxTracer.trace("AudioMixer: Failed to recreate AudioStream for frequency change: %s", SDL_GetError());
-            ch.active = false;
-        }
-
-        SDL_UnlockAudioDevice(m_deviceId);
+        // Update pitch ratio: frequency is the "perceived" sample rate
+        // pitchRatio = how many source samples to advance per device sample
+        ch.pitchRatio = (double)frequency / (double)m_deviceFrequency;
     }
 
     void setChannelLooping(int channel, bool looping)
@@ -497,113 +478,133 @@ private:
     SDL_AudioFormat m_deviceFormat;
     AudioChannel m_channels[MAX_CHANNELS];
     std::mutex m_mutex;
-    float m_tempBuffer[8192];  // Thread-safe buffer for audio callback
 };
 
 // =============================================================================
 // Audio callback - called by SDL2 to fill the audio buffer
+// Uses linear interpolation for smooth pitch shifting without SDL_AudioStream
 // =============================================================================
+
+// Helper: get a sample from source data with linear interpolation
+static inline float getSampleInterpolated(const Uint8* data, int totalSamples, int channels,
+                                          SDL_AudioFormat format, double position, int channelIndex)
+{
+    int pos0 = (int)position;
+    int pos1 = pos0 + 1;
+    double frac = position - pos0;
+
+    // Handle bounds
+    if (pos0 < 0) pos0 = 0;
+    if (pos1 >= totalSamples) pos1 = totalSamples - 1;
+    if (pos0 >= totalSamples) return 0.0f;
+
+    float sample0, sample1;
+
+    if (format == AUDIO_S16SYS || format == AUDIO_S16LSB)
+    {
+        const Sint16* samples = reinterpret_cast<const Sint16*>(data);
+        sample0 = samples[pos0 * channels + channelIndex] / 32768.0f;
+        sample1 = samples[pos1 * channels + channelIndex] / 32768.0f;
+    }
+    else if (format == AUDIO_F32SYS)
+    {
+        const float* samples = reinterpret_cast<const float*>(data);
+        sample0 = samples[pos0 * channels + channelIndex];
+        sample1 = samples[pos1 * channels + channelIndex];
+    }
+    else
+    {
+        // Unsupported format, return silence
+        return 0.0f;
+    }
+
+    // Linear interpolation
+    return (float)(sample0 + (sample1 - sample0) * frac);
+}
 
 void SDLCALL AudioMixer::audioCallback(void* userdata, Uint8* stream, int len)
 {
     AudioMixer* mixer = static_cast<AudioMixer*>(userdata);
     float* output = reinterpret_cast<float*>(stream);
-    int samples = len / sizeof(float);
+    int outputSamples = len / sizeof(float);
+    int outputFrames = outputSamples / DEVICE_CHANNELS;  // stereo frames
 
     // Clear output buffer
     memset(stream, 0, len);
 
-    // Use member buffer for thread safety (no static variable)
-    float* tempBuffer = mixer->m_tempBuffer;
-    int maxTempBytes = sizeof(mixer->m_tempBuffer);
-
     for (int i = 0; i < MAX_CHANNELS; i++)
     {
         AudioChannel& ch = mixer->m_channels[i];
-        if (!ch.active || ch.paused || !ch.stream)
+        if (!ch.active || ch.paused || !ch.sourceData)
             continue;
 
-        // Feed source data to the stream if needed
-        int available = SDL_AudioStreamAvailable(ch.stream);
-        int needed = len * 2;  // Request more than we need to keep stream fed
-
-        while (available < needed && ch.sourcePosition < ch.sourceLength)
+        int totalSourceSamples = ch.getTotalSamples();
+        if (totalSourceSamples <= 0)
         {
-            // Calculate how much source data to feed
-            int bytesToFeed = ch.sourceLength - ch.sourcePosition;
-            if (bytesToFeed > 4096)
-                bytesToFeed = 4096;
+            ch.active = false;
+            continue;
+        }
 
-            int result = SDL_AudioStreamPut(ch.stream,
-                ch.sourceData + ch.sourcePosition, bytesToFeed);
-
-            if (result < 0)
-            {
-                dxTracer.trace("AudioMixer: SDL_AudioStreamPut failed: %s", SDL_GetError());
-                break;
-            }
-
-            ch.sourcePosition += bytesToFeed;
-            available = SDL_AudioStreamAvailable(ch.stream);
-
-            // Handle looping
-            if (ch.sourcePosition >= ch.sourceLength)
+        // Generate output samples using linear interpolation
+        for (int frame = 0; frame < outputFrames; frame++)
+        {
+            // Check if we've reached the end
+            if (ch.position >= totalSourceSamples)
             {
                 if (ch.looping)
                 {
-                    ch.sourcePosition = 0;
+                    ch.position = fmod(ch.position, (double)totalSourceSamples);
                 }
                 else
                 {
-                    // Signal end of stream
-                    SDL_AudioStreamFlush(ch.stream);
+                    ch.active = false;
                     break;
                 }
             }
-        }
 
-        // Get resampled audio from stream (ensure we don't overflow tempBuffer)
-        int requestBytes = (len < maxTempBytes) ? len : maxTempBytes;
-        int got = SDL_AudioStreamGet(ch.stream, tempBuffer, requestBytes);
-        if (got <= 0)
-        {
-            // No more audio available
-            if (ch.sourcePosition >= ch.sourceLength && !ch.looping)
+            // Get interpolated samples (handle mono->stereo conversion)
+            float left, right;
+            if (ch.sourceChannels == 1)
             {
-                ch.active = false;
+                // Mono source: duplicate to both channels
+                left = right = getSampleInterpolated(ch.sourceData, totalSourceSamples,
+                                                     ch.sourceChannels, ch.sourceFormat,
+                                                     ch.position, 0);
             }
-            continue;
-        }
+            else
+            {
+                // Stereo source
+                left = getSampleInterpolated(ch.sourceData, totalSourceSamples,
+                                            ch.sourceChannels, ch.sourceFormat,
+                                            ch.position, 0);
+                right = getSampleInterpolated(ch.sourceData, totalSourceSamples,
+                                             ch.sourceChannels, ch.sourceFormat,
+                                             ch.position, 1);
+            }
 
-        int gotSamples = got / sizeof(float);
-
-        // Apply volume and pan, mix into output
-        for (int j = 0; j < gotSamples; j += 2)
-        {
-            float left = tempBuffer[j];
-            float right = (j + 1 < gotSamples) ? tempBuffer[j + 1] : left;
-
-            // Apply volume
-            left *= ch.volume;
-            right *= ch.volume;
+            // Apply volume with global attenuation to prevent clipping when many sounds play
+            const float MASTER_GAIN = 0.4f;  // Reduce overall level to leave headroom for mixing
+            left *= ch.volume * MASTER_GAIN;
+            right *= ch.volume * MASTER_GAIN;
 
             // Apply pan (-1 = full left, +1 = full right)
-            // Use proper linear panning: at center (0), both channels are full volume
-            float leftGain = 1.0f - (std::max)(0.0f, ch.pan);   // 1.0 at left, 0.0 at right
-            float rightGain = 1.0f + (std::min)(0.0f, ch.pan);  // 0.0 at left, 1.0 at right
+            float leftGain = 1.0f - (std::max)(0.0f, ch.pan);
+            float rightGain = 1.0f + (std::min)(0.0f, ch.pan);
             left *= leftGain;
             right *= rightGain;
 
             // Mix into output (additive mixing)
-            if (j < samples)
-                output[j] += left;
-            if (j + 1 < samples)
-                output[j + 1] += right;
+            int outIdx = frame * 2;
+            output[outIdx] += left;
+            output[outIdx + 1] += right;
+
+            // Advance position by pitch ratio
+            ch.position += ch.pitchRatio;
         }
     }
 
     // Clamp output to prevent clipping
-    for (int i = 0; i < samples; i++)
+    for (int i = 0; i < outputSamples; i++)
     {
         if (output[i] > 1.0f) output[i] = 1.0f;
         if (output[i] < -1.0f) output[i] = -1.0f;
@@ -616,26 +617,30 @@ void SDLCALL AudioMixer::audioCallback(void* userdata, Uint8* stream, int len)
 
 struct SDL2SoundData
 {
-    // Raw PCM data (loaded from WAV)
+    // Raw PCM data (loaded from WAV or OGG)
     Uint8* pcmData;
     Uint32 pcmLength;
     SDL_AudioSpec audioSpec;
+    bool fromWav;       // true = use SDL_FreeWAV, false = use SDL_free
 
     // Playback state
     int channel;        // -1 = not playing
     float volume;       // 0.0 to 1.0 (stored for when not playing)
     float pan;          // -1.0 to +1.0
-    int frequency;      // Target frequency for pitch
+    int frequency;      // Current target frequency for pitch (may be modified)
+    int originalFrequency; // Original sample rate from file (for reset)
     bool is3d;
     float posX, posY, posZ;
 
     SDL2SoundData()
         : pcmData(nullptr)
         , pcmLength(0)
+        , fromWav(true)
         , channel(-1)
         , volume(1.0f)
         , pan(0.0f)
         , frequency(22050)
+        , originalFrequency(22050)
         , is3d(false)
         , posX(0), posY(0), posZ(0)
     {
@@ -646,11 +651,54 @@ struct SDL2SoundData
     {
         if (pcmData)
         {
-            SDL_FreeWAV(pcmData);
+            if (fromWav)
+                SDL_FreeWAV(pcmData);
+            else
+                SDL_free(pcmData);
             pcmData = nullptr;
         }
     }
 };
+
+// Helper to load OGG file using stb_vorbis
+static SDL2SoundData* loadOggFile(const char* filename)
+{
+    int channels, sampleRate;
+    short* output;
+    int samples = stb_vorbis_decode_filename(filename, &channels, &sampleRate, &output);
+
+    if (samples <= 0)
+    {
+        dxTracer.trace("Failed to load OGG: %s", filename);
+        return nullptr;
+    }
+
+    SDL2SoundData* data = new SDL2SoundData();
+    data->fromWav = false;  // Use SDL_free, not SDL_FreeWAV
+
+    // stb_vorbis returns 16-bit signed samples
+    data->pcmLength = samples * channels * sizeof(short);
+    data->pcmData = (Uint8*)SDL_malloc(data->pcmLength);
+    if (!data->pcmData)
+    {
+        free(output);
+        delete data;
+        return nullptr;
+    }
+    memcpy(data->pcmData, output, data->pcmLength);
+    free(output);
+
+    // Set up audio spec
+    data->audioSpec.freq = sampleRate;
+    data->audioSpec.format = AUDIO_S16SYS;
+    data->audioSpec.channels = (Uint8)channels;
+    data->audioSpec.samples = 4096;
+    data->audioSpec.size = data->pcmLength;
+    data->frequency = sampleRate;
+    data->originalFrequency = sampleRate;
+
+    return data;
+}
 
 // Helper to load WAV file
 static SDL2SoundData* loadWavFile(const char* filename)
@@ -670,8 +718,35 @@ static SDL2SoundData* loadWavFile(const char* filename)
     data->pcmLength = length;
     data->audioSpec = spec;
     data->frequency = spec.freq;
+    data->originalFrequency = spec.freq;
 
     return data;
+}
+
+// Load audio file - tries WAV first, then OGG
+static SDL2SoundData* loadAudioFile(const char* filename)
+{
+    // Check file extension
+    const char* ext = strrchr(filename, '.');
+
+    if (ext && (_stricmp(ext, ".ogg") == 0))
+    {
+        // OGG file - use stb_vorbis
+        return loadOggFile(filename);
+    }
+    else if (ext && (_stricmp(ext, ".wav") == 0))
+    {
+        // WAV file - use SDL_LoadWAV
+        return loadWavFile(filename);
+    }
+    else
+    {
+        // Unknown extension - try WAV first, then OGG
+        SDL2SoundData* data = loadWavFile(filename);
+        if (!data)
+            data = loadOggFile(filename);
+        return data;
+    }
 }
 
 namespace DirectX
@@ -724,7 +799,7 @@ Sound* SoundManager::create(Char* filename, Boolean enable3d, UInt nBuffers)
     if (!filename)
         return nullptr;
 
-    SDL2SoundData* data = loadWavFile(filename);
+    SDL2SoundData* data = loadAudioFile(filename);
     if (!data)
         return nullptr;
 
@@ -875,8 +950,8 @@ Int Sound::play(UInt priority, Boolean looped)
         return dxFailed;
 
     // Apply stored settings
-    AudioMixer::instance()->setChannelVolume(data->channel, data->volume);
-    AudioMixer::instance()->setChannelPan(data->channel, data->pan);
+    AudioMixer::instance()->setChannelVolume(data->channel, data->volume, this);
+    AudioMixer::instance()->setChannelPan(data->channel, data->pan, this);
     AudioMixer::instance()->setChannelLooping(data->channel, looped != FALSE);
 
     return dxSuccess;
@@ -895,6 +970,12 @@ Int Sound::stop()
 
 Int Sound::reset()
 {
+    SDL2SoundData* data = GetSDL2Data(this);
+    if (data)
+    {
+        // Reset frequency to original sample rate
+        data->frequency = data->originalFrequency;
+    }
     return stop();
 }
 
@@ -928,7 +1009,7 @@ void Sound::pan(Int value)
     data->pan = pan;
 
     if (data->channel >= 0)
-        AudioMixer::instance()->setChannelPan(data->channel, pan);
+        AudioMixer::instance()->setChannelPan(data->channel, pan, this);
 }
 
 void Sound::frequency(Int value)
@@ -943,7 +1024,7 @@ void Sound::frequency(Int value)
     data->frequency = value;
 
     if (data->channel >= 0)
-        AudioMixer::instance()->setChannelFrequency(data->channel, value);
+        AudioMixer::instance()->setChannelFrequency(data->channel, value, this);
 }
 
 Int Sound::frequency()
@@ -968,7 +1049,7 @@ void Sound::volume(Int value)
     data->volume = vol;
 
     if (data->channel >= 0)
-        AudioMixer::instance()->setChannelVolume(data->channel, vol);
+        AudioMixer::instance()->setChannelVolume(data->channel, vol, this);
 }
 
 Int Sound::volume()
@@ -1012,8 +1093,8 @@ void Sound::position(Vector3 pos)
 
     if (data->channel >= 0)
     {
-        AudioMixer::instance()->setChannelPan(data->channel, pan);
-        AudioMixer::instance()->setChannelVolume(data->channel, vol);
+        AudioMixer::instance()->setChannelPan(data->channel, pan, this);
+        AudioMixer::instance()->setChannelVolume(data->channel, vol, this);
     }
 }
 

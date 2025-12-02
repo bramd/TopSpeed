@@ -13,6 +13,9 @@ add_library(DxCommon STATIC
     Src/Input_SDL2.cpp
     Src/Stubs_SDL2.cpp
 
+    # stb_vorbis for OGG/Vorbis audio decoding
+    Src/stb_vorbis_impl.c
+
     # The following files are excluded in SDL2 mode because they require DirectX:
     # Src/Application.cpp - requires Dxerr8.h, Direct3D8
     # Src/Game.cpp - requires Dxerr8.h, Direct3D8
