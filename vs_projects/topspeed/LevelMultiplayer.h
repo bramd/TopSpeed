@@ -10,7 +10,9 @@
 #include "Game.h"
 #include "Car.h"
 #include "Track.h"
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
 #include "NetworkPlayer.h"
+#endif
 #include "Packets.h"
 #include "Level.h"
 
@@ -45,7 +47,9 @@ private:
     Boolean                 m_isServer;
     // Float                   m_lastLoadTrack;
     Float                   m_updateClient;
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
     NetworkPlayer           m_players[NMAXPLAYERS];
+#endif
     DirectX::Sound*         m_soundYouAre;
     DirectX::Sound*         m_soundPlayer;
     DirectX::Sound*         m_soundPosition[NMAXPLAYERS];

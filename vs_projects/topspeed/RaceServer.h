@@ -7,10 +7,12 @@
 #ifndef __RACING_RACESERVER_H__
 #define __RACING_RACESERVER_H__
 
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
 #include <DxCommon/If/Network.h>
+#include <map>
+#endif
 #include <Common/If/Mutex.h>
 #include "Packets.h"
-#include <map>
 #include "RaceClient.h"
 #include "Track.h"
 
@@ -21,8 +23,11 @@ class Game;
 
 
 
-
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
 class RaceServer : public DirectX::IServer
+#else
+class RaceServer
+#endif
 {
 public:
     /*
@@ -71,11 +76,19 @@ public:
 private:
     UInt        nRacers( );
 private:
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
     typedef std::map<UInt, PlayerData>   TPlayerDataMap;
+#endif
     Game*                           m_game;
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
     DirectX::Server*                m_server;
+#else
+    void*                           m_server;
+#endif
     Mutex                           m_mutex;
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
     TPlayerDataMap                  m_playerMap;
+#endif
     Float                           m_lastUpdateTime;
     Boolean                         m_raceStarted;
     UInt                            m_raceResults[NMAXPLAYERS];

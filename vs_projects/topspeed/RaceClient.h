@@ -7,13 +7,20 @@
 #ifndef __RACING_RACECLIENT_H__
 #define __RACING_RACECLIENT_H__
 
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
 #include <DxCommon/If/Network.h>
+#endif
 #include <Common/If/Mutex.h>
 #include "Packets.h"
 
 class Game;
 class Menu;
+
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
 class RaceClient : public DirectX::IClient
+#else
+class RaceClient
+#endif
 {
 public:
     RaceClient(Game* game);
@@ -26,7 +33,9 @@ public:
     void startEnumSessions(char* ipAddress = 0);
     void stopEnumSessions( );
     UInt nSessions( );
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
     UInt session(UInt i, DirectX::Client::SessionInfo& info);
+#endif
     UInt joinSession(UInt session);
     UInt joinSessionAt(Char* ipAddress);
     void sendData(PlayerData data, Boolean secure = false);
@@ -77,7 +86,11 @@ private:
     UInt                m_playerId;
     Game*               m_game;
     Menu*               m_menu;
+#ifndef TOPSPEED_DISABLE_MULTIPLAYER
     DirectX::Client*    m_client;
+#else
+    void*               m_client;
+#endif
     Mutex               m_mutex;
     Char                m_track[32];
     UInt                m_nrOfLaps;

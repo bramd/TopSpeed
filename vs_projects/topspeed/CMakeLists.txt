@@ -27,6 +27,11 @@ if(NOT EMSCRIPTEN)
         RaceServer.cpp
         StdAfx.cpp
     )
+else()
+    # Stubs for multiplayer classes (required because Game.cpp and Menu.cpp reference them)
+    list(APPEND TOPSPEED_SOURCES
+        Multiplayer_Stubs.cpp
+    )
 endif()
 
 if(EMSCRIPTEN)
