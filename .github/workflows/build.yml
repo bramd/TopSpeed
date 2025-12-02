@@ -1,0 +1,58 @@
+name: Build TopSpeed
+
+on:
+  push:
+    branches: [master, feature/cmake-sdl2-migration]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: 'a42af01b72c28a8e1d7b48107b33e4f286a55ef6'
+
+      - name: Configure and Build
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: 'vs2022-debug'
+          buildPreset: 'vs2022-debug'
+
+      - name: Assemble Artifact
+        shell: pwsh
+        run: |
+          $dest = "artifact/TopSpeed"
+          New-Item -ItemType Directory -Force -Path "$dest/Sounds/en"
+
+          # Executable
+          Copy-Item "build/vs2022-debug/vs_projects/topspeed/Debug/TopSpeed.exe" $dest
+
+          # SDL2 debug DLL
+          Copy-Item "build/vs2022-debug/vcpkg_installed/x86-windows/debug/bin/SDL2d.dll" $dest
+
+          # Sound assets (merged from two locations)
+          Copy-Item "vs_projects/topspeed/Sounds/*.wav" "$dest/Sounds/"
+          Copy-Item "installer/tspeed/Sounds/en.ogg" "$dest/Sounds/"
+          Copy-Item "installer/tspeed/Sounds/en/*" "$dest/Sounds/en/" -Recurse
+
+          # Other assets
+          Copy-Item "installer/tspeed/Effects" $dest -Recurse
+          Copy-Item "installer/tspeed/Tracks" $dest -Recurse
+          Copy-Item "installer/tspeed/Vehicles" $dest -Recurse
+          Copy-Item "installer/tspeed/Manual" $dest -Recurse
+          Copy-Item "installer/tspeed/Scripts" $dest -Recurse
+          Copy-Item "installer/tspeed/TopSpeed.ico" $dest
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TopSpeed-Debug
+          path: artifact/TopSpeed
+          retention-days: 30
