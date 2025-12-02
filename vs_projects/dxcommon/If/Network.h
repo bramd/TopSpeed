@@ -8,7 +8,12 @@
 #define __DXCOMMON_NETWORK_H__
 
 #include <DxCommon/If/Common.h>
+
+#if defined(TOPSPEED_USE_SDL2) || defined(TOPSPEED_DISABLE_MULTIPLAYER)
+#include <DxCommon/If/SDL2Compat.h>
+#else
 #include <dplay8.h>
+#endif
 
 #define DXCOMMON_NMAXSESSIONS       (256)
 

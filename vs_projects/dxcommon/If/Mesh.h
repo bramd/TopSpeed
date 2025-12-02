@@ -10,8 +10,19 @@
 #include <DxCommon/If/Common.h>
 
 #include <tchar.h>
+
+#ifdef TOPSPEED_USE_SDL2
+#include <DxCommon/If/SDL2Compat.h>
+// Stub D3DX types
+typedef void* LPD3DXMESH;
+typedef void* LPDIRECTXFILEDATA;
+struct D3DXVECTOR3 { float x, y, z; };
+struct D3DXMATRIX { float m[4][4]; };
+struct D3DMATERIAL8 { int dummy; };
+#else
 #include <d3d8.h>
 #include <d3dx8.h>
+#endif
 
 
 

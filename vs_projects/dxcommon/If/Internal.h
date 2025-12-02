@@ -11,7 +11,11 @@
 #include <Common/If/Common.h>
 #include <DxCommon/If/Defs.h>
 
+#ifdef TOPSPEED_USE_SDL2
+#include <DxCommon/If/SDL2Compat.h>
+#else
 #include <d3d8.h>
+#endif
 
 
 #ifdef DXCOMMON_EXPORTS

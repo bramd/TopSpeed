@@ -10,8 +10,10 @@
 #include <DxCommon/If/Internal.h>
 #include <DxCommon/If/Game.h>
 
+#ifndef TOPSPEED_USE_SDL2
 #include <D3D.h>
 #include <D3D8types.h>
+#endif
 
 namespace DirectX
 {

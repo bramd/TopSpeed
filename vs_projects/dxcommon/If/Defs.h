@@ -7,8 +7,13 @@
 #ifndef __DXCOMMON_DEFS_H__
 #define __DXCOMMON_DEFS_H__
 
+#ifdef TOPSPEED_USE_SDL2
+// D3D types are stubbed in SDL2Compat.h
+#else
 #include "d3d8types.h"
-#include <DxCommon/If/Internal.h>
+#endif
+
+// Note: Internal.h is included after type definitions to avoid circular dependency
 
 #define WAVEFILE_READ   1
 #define WAVEFILE_WRITE  2

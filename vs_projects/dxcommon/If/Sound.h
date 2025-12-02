@@ -7,16 +7,28 @@
 #ifndef __DXCOMMON_SOUND_H__
 #define __DXCOMMON_SOUND_H__
 
-#define DIRECTSOUND_VERSION 0x1000
-
 #include <DxCommon/If/Common.h>
-#include <mmsystem.h>  
-#include <dsound.h>
 
+#ifdef TOPSPEED_USE_SDL2
+#include <DxCommon/If/SDL2Compat.h>
+#include <SDL.h>
+#include <SDL_mixer.h>
+// Forward declare Mix_Chunk for SDL2 Sound constructor
+struct Mix_Chunk;
+#else
+#define DIRECTSOUND_VERSION 0x1000
+#include <mmsystem.h>
+#include <dsound.h>
+#endif
 
 #ifdef _USE_VORBIS_
+#ifndef TOPSPEED_USE_SDL2
 #include <vorbis/codec.h>
 #include <vorbis/vorbisfile.h>
+#else
+// SDL2_mixer handles vorbis internally
+struct OggVorbis_File { int dummy; };
+#endif
 #endif
 
 namespace DirectX
@@ -95,8 +107,12 @@ public:
     _dxcommon_ Sound(LPDIRECTSOUNDBUFFER* buffer, UInt bufferSize, UInt nBuffers, WaveFile* waveFile);
     _dxcommon_ Sound(LPDIRECTSOUNDBUFFER* buffer, UInt bufferSize, UInt nBuffers, LPWAVEFORMATEX waveFormat);
 #ifdef _USE_VORBIS_
-    _dxcommon_ Sound(LPDIRECTSOUNDBUFFER* buffer, UInt bufferSize, UInt nBuffers, 
+    _dxcommon_ Sound(LPDIRECTSOUNDBUFFER* buffer, UInt bufferSize, UInt nBuffers,
                      OggVorbis_File* vorbisFile, UShort bitsPerSample, UInt avgBytesPerSec);
+#endif
+#ifdef TOPSPEED_USE_SDL2
+    // SDL2-specific constructor
+    _dxcommon_ Sound(Mix_Chunk* chunk, bool is3d);
 #endif
     _dxcommon_ virtual ~Sound();
 

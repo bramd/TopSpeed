@@ -10,7 +10,12 @@
 #include <DxCommon/If/Internal.h>
 #include <DxCommon/If/D3DFont.h>
 #include <DxCommon/If/Timer.h>
+
+#ifdef TOPSPEED_USE_SDL2
+#include <DxCommon/If/SDL2Compat.h>
+#else
 #include <D3DX8.h>
+#endif
 
 namespace DirectX
 {

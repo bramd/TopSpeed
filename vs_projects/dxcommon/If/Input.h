@@ -7,11 +7,17 @@
 #ifndef __DXCOMMON_INPUT_H__
 #define __DXCOMMON_INPUT_H__
 
+#include <DxCommon/If/Internal.h>
+
+#ifdef TOPSPEED_USE_SDL2
+#include <DxCommon/If/SDL2Compat.h>
+#include <DxCommon/If/DIKCodes.h>
+#include <SDL.h>
+#else
 // Microsoft apparently didn't define this, so let's do it ourselves
 #define DIRECTINPUT_VERSION   0x0800
-
-#include <DxCommon/If/Internal.h>
 #include <dinput.h>
+#endif
 
 #include <vector>
 

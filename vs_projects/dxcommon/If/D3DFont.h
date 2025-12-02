@@ -8,7 +8,15 @@
 #define __DXCOMMON_D3DFONT_H__
 
 #include <DxCommon/If/Internal.h>
+
+#ifdef TOPSPEED_USE_SDL2
+#include <DxCommon/If/SDL2Compat.h>
+// Stub D3D8 types for font
+typedef void* LPDIRECT3DTEXTURE8;
+typedef void* LPDIRECT3DVERTEXBUFFER8;
+#else
 #include <D3D8.h>
+#endif
 
 
 namespace DirectX

@@ -9,9 +9,15 @@
 
 #include <DxCommon/If/Common.h>
 
-
+#ifdef TOPSPEED_USE_SDL2
+#include <DxCommon/If/SDL2Compat.h>
+// Stub D3D light types
+struct D3DLIGHT8 { int dummy; };
+enum { D3DLIGHT_DIRECTIONAL = 1, D3DLIGHT_POINT = 2, D3DLIGHT_SPOT = 3 };
+#else
 #include <d3d8.h>
 #include <d3dx8.h>
+#endif
 
 
 
