@@ -1,0 +1,36 @@
+# Build directories
+build/
+out/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Visual Studio
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+x64/
+Debug/
+Release/
+
+# Compiled binaries in installer folder (keep assets, ignore built exe/dlls)
+installer/tspeed/*.exe
+installer/tspeed/*.dll
+installer/tspeed/*.trc
+installer/tspeed/*.cfg
+installer/tspeed/*.bin
+
+# vcpkg installed packages (managed by vcpkg.json)
+vcpkg_installed/
+
+# Precompiled headers
+*.pch
+*.ipch
+
+# IntelliSense
+*.VC.db
+*.VC.opendb

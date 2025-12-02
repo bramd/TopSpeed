@@ -19,6 +19,11 @@
 // Global game instance
 static Game* g_game = nullptr;
 
+// External tracers (defined in Common, DxCommon, and Game.cpp)
+extern Tracer commonTracer;
+extern Tracer dxTracer;
+extern Tracer _raceTracer;
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
     // Initialize SDL
@@ -57,11 +62,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
     SAFE_DELETE(settings);
 
-    // Setup tracing
+    // Setup tracing (like original TopSpeed.cpp)
     File* traceFile = nullptr;
     if (enableTracing)
     {
-        traceFile = new File("TopSpeed.trc", File::create | File::write);
+        traceFile = new File("TopSpeed.trc", File::read | File::write | File::create);
+        commonTracer.enable();
+        commonTracer.bind(traceFile);
+        _raceTracer.enable();
+        _raceTracer.bind(traceFile);
+        dxTracer.enable();
+        dxTracer.bind(traceFile);
     }
 
     // Create game window
@@ -88,10 +99,38 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // Create and initialize game
     g_game = new Game();
-    g_game->initialize(hwnd);  // Initialize with Windows HWND
+    g_game->initialize(hwnd);
 
-    // Run the game (this contains its own main loop)
-    g_game->run();
+    // Main game loop - Game::run() processes ONE frame, so we need to call it repeatedly
+    // Note: InputManager::update() calls SDL_PollEvent() internally for joystick hotplug,
+    // and Keyboard::update() uses SDL_PumpEvents() + SDL_GetKeyboardState() for key state.
+    // We use SDL_PeekEvent here to check for quit without consuming events.
+    bool running = true;
+    SDL_Event event;
+
+    while (running)
+    {
+        // Check for quit events without consuming them
+        // (InputManager::update will process other events)
+        while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_QUIT, SDL_QUIT) > 0)
+        {
+            running = false;
+        }
+        while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_WINDOWEVENT, SDL_WINDOWEVENT) > 0)
+        {
+            if (event.window.event == SDL_WINDOWEVENT_CLOSE)
+                running = false;
+        }
+
+        // Run one frame of the game (this calls InputManager::update which pumps events)
+        if (running)
+        {
+            g_game->run();
+        }
+
+        // Small delay to prevent 100% CPU usage
+        SDL_Delay(1);
+    }
 
     // Cleanup
     delete g_game;

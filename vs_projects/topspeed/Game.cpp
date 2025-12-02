@@ -73,7 +73,7 @@ Game::~Game( )
 }
 
 
-void 
+void
 Game::initialize(::Window::Handle handle)
 {
     RACE("Game::initialize : handle = %d", (UInt) handle);
@@ -98,7 +98,7 @@ Game::initialize(::Window::Handle handle)
 
     m_timer.microElapsed( );
     m_currentTime = 0.0f;
-    state(menu);        
+    state(menu);
     m_initialized = true;
 }
 

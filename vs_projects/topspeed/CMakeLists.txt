@@ -52,3 +52,20 @@ target_link_libraries(TopSpeed PRIVATE
 
 # Precompiled header
 target_precompile_headers(TopSpeed PRIVATE StdAfx.h)
+
+# Set working directory for debugging to the game assets folder
+# This allows the game to find Sounds/, Tracks/, etc. without copying
+set_target_properties(TopSpeed PROPERTIES
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/installer/tspeed"
+)
+
+# Copy DLLs to assets folder for running/debugging
+add_custom_command(TARGET TopSpeed POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:TopSpeed>
+        "${CMAKE_SOURCE_DIR}/installer/tspeed/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_RUNTIME_DLLS:TopSpeed>
+        "${CMAKE_SOURCE_DIR}/installer/tspeed/"
+    COMMAND_EXPAND_LISTS
+)
