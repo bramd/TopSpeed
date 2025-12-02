@@ -15,7 +15,6 @@ add_compile_definitions(
 
 # Find dependencies
 find_package(SDL2 CONFIG REQUIRED)
-find_package(SDL2_mixer CONFIG REQUIRED)
 
 # Add subdirectories in dependency order
 add_subdirectory(vs_projects/common)

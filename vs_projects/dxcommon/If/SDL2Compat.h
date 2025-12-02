@@ -16,7 +16,6 @@
 #include <mmsystem.h>  // For WAVEFORMATEX, HMMIO, MMCKINFO, etc.
 
 #include <SDL.h>
-#include <SDL_mixer.h>
 
 // =============================================================================
 // DirectSound stub types - these aren't in Windows SDK so we need to define them

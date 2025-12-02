@@ -3,7 +3,6 @@
   "name": "topspeed",
   "version": "3.0.0",
   "dependencies": [
-    "sdl2",
-    "sdl2-mixer"
+    "sdl2"
   ]
 }
