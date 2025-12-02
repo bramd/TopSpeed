@@ -1,5 +1,8 @@
-# TopSpeed executable
+# TopSpeed executable (SDL2 mode)
+# Note: For SDL2 mode, we exclude MFC-dependent files and use Main_SDL2.cpp instead
+
 add_executable(TopSpeed WIN32
+    # Core game logic (platform-independent)
     Car.cpp
     ComputerPlayer.cpp
     Game.cpp
@@ -13,11 +16,18 @@ add_executable(TopSpeed WIN32
     RaceInput.cpp
     RaceServer.cpp
     RaceSettings.cpp
-    StdAfx.cpp
-    TopSpeed.cpp
-    TopSpeedDlg.cpp
     Track.cpp
+
+    # SDL2 entry point (replaces MFC TopSpeed.cpp/TopSpeedDlg.cpp)
+    Main_SDL2.cpp
+    StdAfx.cpp
+
+    # Resource file (for icon etc)
     TopSpeed.rc
+
+    # Files excluded in SDL2 mode (require MFC):
+    # TopSpeed.cpp - CTopSpeedApp MFC application class
+    # TopSpeedDlg.cpp - CTopSpeedDlg MFC dialog class
 )
 
 target_include_directories(TopSpeed PRIVATE
@@ -33,12 +43,6 @@ target_compile_definitions(TopSpeed PRIVATE
     _USE_VORBIS_
     TOPSPEED_USE_SDL2
     TOPSPEED_DISABLE_MULTIPLAYER
-    _AFXDLL
-)
-
-# Use MFC as shared DLL
-set_target_properties(TopSpeed PROPERTIES
-    MFC_FLAG 2
 )
 
 target_link_libraries(TopSpeed PRIVATE

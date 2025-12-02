@@ -14,8 +14,7 @@
 
 #ifdef TOPSPEED_USE_SDL2
 #include <DxCommon/If/SDL2Compat.h>
-// Stub D3DX types for Game
-struct D3DXMATRIX { float m[4][4]; };
+// Stub D3D types - D3DXMATRIX is in SDL2Compat.h
 struct D3DCAPS8 { int dummy; };
 enum D3DTEXTUREFILTERTYPE { D3DTEXF_POINT = 1, D3DTEXF_LINEAR = 2 };
 #else

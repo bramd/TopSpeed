@@ -13,12 +13,9 @@
 
 #ifdef TOPSPEED_USE_SDL2
 #include <DxCommon/If/SDL2Compat.h>
-// Stub D3DX types
+// Stub D3DX mesh type - D3DXVECTOR3, D3DXMATRIX, D3DMATERIAL8 are in SDL2Compat.h
 typedef void* LPD3DXMESH;
-typedef void* LPDIRECTXFILEDATA;
-struct D3DXVECTOR3 { float x, y, z; };
-struct D3DXMATRIX { float m[4][4]; };
-struct D3DMATERIAL8 { int dummy; };
+// LPDIRECTXFILEDATA is in SDL2Compat.h
 #else
 #include <d3d8.h>
 #include <d3dx8.h>

@@ -66,6 +66,7 @@
 #define DIK_RSHIFT          0x36
 #define DIK_MULTIPLY        0x37
 #define DIK_LALT            0x38
+#define DIK_LMENU           DIK_LALT    // Alias for left Alt (DirectInput naming)
 #define DIK_SPACE           0x39
 #define DIK_CAPITAL         0x3A
 #define DIK_F1              0x3B

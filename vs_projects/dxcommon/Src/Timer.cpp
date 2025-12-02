@@ -5,7 +5,9 @@
 * This program is distributed under the terms of the GNU General Public License version 3.
 */
 #include <DxCommon/If/Common.h>
+#ifndef TOPSPEED_USE_SDL2
 #include <dxerr8.h>
+#endif
 
 
 namespace DirectX

@@ -17,7 +17,9 @@
 #include <DxCommon/If/Particle.h>
 #include <DxCommon/If/Network.h>
 #include <DxCommon/If/Game.h>
-#include <Common/If/Trace.h>
+
+// Use DXCOMMON for tracing - define TRACE_DEBUG as a wrapper
+#define TRACE_DEBUG DXCOMMON
 
 namespace DirectX
 {

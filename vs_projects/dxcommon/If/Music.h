@@ -7,9 +7,13 @@
 #ifndef __DXCOMMON_MUSIC_H__
 #define __DXCOMMON_MUSIC_H__
 
+#ifdef TOPSPEED_USE_SDL2
+#include <DxCommon/If/SDL2Compat.h>
+#else
 #include <dmusicc.h>
 #include <dmusici.h>
 #include <dsound.h>
+#endif
 
 #include <DxCommon/If/Internal.h>
 

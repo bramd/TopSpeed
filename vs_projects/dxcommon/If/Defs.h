@@ -8,7 +8,7 @@
 #define __DXCOMMON_DEFS_H__
 
 #ifdef TOPSPEED_USE_SDL2
-// D3D types are stubbed in SDL2Compat.h
+#include <DxCommon/If/SDL2Compat.h>
 #else
 #include "d3d8types.h"
 #endif

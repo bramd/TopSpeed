@@ -11,9 +11,7 @@
 
 #ifdef TOPSPEED_USE_SDL2
 #include <DxCommon/If/SDL2Compat.h>
-// Stub D3D8 types for font
-typedef void* LPDIRECT3DTEXTURE8;
-typedef void* LPDIRECT3DVERTEXBUFFER8;
+// Types now defined in SDL2Compat.h
 #else
 #include <D3D8.h>
 #endif
