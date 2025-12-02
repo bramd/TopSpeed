@@ -20,7 +20,7 @@
 #include "RaceClient.h"
 #include "RaceInput.h"
 #include "resource.h"
-#include "Common\If\Algorithm.h"
+#include "Common/If/Algorithm.h"
 
 
 Tracer  _raceTracer("race");

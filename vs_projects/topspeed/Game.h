@@ -7,8 +7,8 @@
 #ifndef __RACING_GAME_H__
 #define __RACING_GAME_H__
 
-#include <DxCommon\If\Common.h>
-#include <Common\If\TList.h>
+#include <DxCommon/If/Common.h>
+#include <Common/If/TList.h>
 
 #include "RaceSettings.h"
 #include "Track.h"

@@ -7,8 +7,8 @@
 #ifndef __RACING_TRACK_H__
 #define __RACING_TRACK_H__
 
-#include "Common\If\Common.h"
-#include "DxCommon\If\Common.h" 
+#include "Common/If/Common.h"
+#include "DxCommon/If/Common.h" 
 
 class Game;
 

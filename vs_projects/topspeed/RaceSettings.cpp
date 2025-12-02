@@ -6,7 +6,7 @@
 */
 #include "RaceSettings.h"
 #include "Game.h"
-#include "Common\If\Algorithm.h"
+#include "Common/If/Algorithm.h"
 
 #define KeyLeft         0xcb
 #define KeyRight        0xcd
