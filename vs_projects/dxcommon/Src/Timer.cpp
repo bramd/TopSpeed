@@ -9,6 +9,10 @@
 #include <dxerr8.h>
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 
 namespace DirectX
 {
@@ -16,6 +20,12 @@ namespace DirectX
 Timer::Timer( )
 {
     DXCOMMON("(+) Timer");
+#ifdef __EMSCRIPTEN__
+    // Use emscripten_get_now() which returns milliseconds as double
+    m_usingQPT = false;
+    m_lastTimed = (Huge)(emscripten_get_now() * 1000.0); // Store as microseconds
+    DXCOMMON("Timer : using emscripten timer");
+#else
     // See how many ticks per second our PerformanceTimer does
     LARGE_INTEGER ticksPerSec;
     m_usingQPT = (QueryPerformanceFrequency(&ticksPerSec) != 0);
@@ -36,6 +46,7 @@ Timer::Timer( )
         // Initialize m_lastTimed
         m_lastTimed = timeGetTime( );
     }
+#endif
 }
 
 
@@ -65,6 +76,13 @@ void Timer::reset( )
 
 UInt Timer::elapsed(Boolean reset)
 {
+#ifdef __EMSCRIPTEN__
+    Huge now = (Huge)(emscripten_get_now() * 1000.0); // microseconds
+    UInt elapsed = (UInt)((now - m_lastTimed) / 1000); // convert to milliseconds
+    if (reset)
+        m_lastTimed = now;
+    return elapsed;
+#else
     if (m_usingQPT)
     {
         LARGE_INTEGER queryTime;
@@ -82,11 +100,18 @@ UInt Timer::elapsed(Boolean reset)
             m_lastTimed = time;
         return elapsed;
     }
+#endif
 }
 
 
 Huge Timer::microElapsed( )
 {
+#ifdef __EMSCRIPTEN__
+    Huge now = (Huge)(emscripten_get_now() * 1000.0); // microseconds
+    Huge elapsed = now - m_lastTimed;
+    m_lastTimed = now;
+    return elapsed;
+#else
     if (m_usingQPT)
     {
         LARGE_INTEGER queryTime;
@@ -102,6 +127,7 @@ Huge Timer::microElapsed( )
         m_lastTimed = time;
         return elapsed;
     }
+#endif
 }
 
 } // namespace DirectX

@@ -36,19 +36,35 @@ target_include_directories(DxCommon PUBLIC
     ${CMAKE_SOURCE_DIR}/vs_projects
 )
 
-target_compile_definitions(DxCommon PUBLIC
-    WIN32
-    _LIB
-    DXCOMMON_STATIC
-    COMMON_STATIC
-    _USE_VORBIS_
-    TOPSPEED_USE_SDL2
-    TOPSPEED_DISABLE_MULTIPLAYER
-)
+if(EMSCRIPTEN)
+    target_compile_definitions(DxCommon PUBLIC
+        _LIB
+        DXCOMMON_STATIC
+        COMMON_STATIC
+        _USE_VORBIS_
+        TOPSPEED_USE_SDL2
+        TOPSPEED_DISABLE_MULTIPLAYER
+    )
 
-target_link_libraries(DxCommon PUBLIC
-    Common
-    $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
-    $<IF:$<TARGET_EXISTS:SDL2::SDL2>,SDL2::SDL2,SDL2::SDL2-static>
-    winmm
-)
+    # Emscripten: SDL2 is linked via compiler/linker flags, no explicit target needed
+    target_link_libraries(DxCommon PUBLIC
+        Common
+    )
+else()
+    target_compile_definitions(DxCommon PUBLIC
+        WIN32
+        _LIB
+        DXCOMMON_STATIC
+        COMMON_STATIC
+        _USE_VORBIS_
+        TOPSPEED_USE_SDL2
+        TOPSPEED_DISABLE_MULTIPLAYER
+    )
+
+    target_link_libraries(DxCommon PUBLIC
+        Common
+        $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
+        $<IF:$<TARGET_EXISTS:SDL2::SDL2>,SDL2::SDL2,SDL2::SDL2-static>
+        winmm
+    )
+endif()

@@ -4,9 +4,11 @@
 * Code contributors: Davy Kager, Davy Loots and Leonard de Ruijter
 * This program is distributed under the terms of the GNU General Public License version 3.
 */
+#ifndef __EMSCRIPTEN__
 #define _WIN32_WINNT 0x0501
 #define _WIN32_DCOM
 #include <objbase.h>
+#endif
 
 
 #include "Game.h"
@@ -43,12 +45,14 @@ Game::Game( ) :
     m_pauseKeyReleased(true)
 {
     RACE("(+) Game");
+#ifndef __EMSCRIPTEN__
     RACE("Game : initializing COM");
     HRESULT hres = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     if (FAILED(hres))
     {
         RACE("Game : initializing COM failed with errorcode 0x%x", hres);
     }
+#endif
 }
 
 
@@ -67,9 +71,11 @@ Game::~Game( )
     SAFE_DELETE(m_levelMultiplayer);
     SAFE_DELETE(m_soundManager);
     SAFE_DELETE(m_inputManager);
+#ifndef __EMSCRIPTEN__
     RACE("~Game : uninitializing COM");
     CoUninitialize();
     RACE("~Game : uninitialized COM");
+#endif
 }
 
 
@@ -525,22 +531,31 @@ Game::language(Char* l)
         strcpy(m_language, l);
 }
 
-DirectX::Sound* 
+DirectX::Sound*
 Game::loadLanguageSound(Char* file, Boolean threeD, Boolean ignoreNonexistence)
 {
     Char filename[128];
+    Char fileCopy[128];
+
+    // Make a copy of file and convert backslashes to forward slashes for cross-platform
+    strncpy(fileCopy, file, sizeof(fileCopy) - 1);
+    fileCopy[sizeof(fileCopy) - 1] = '\0';
+    for (char* p = fileCopy; *p; ++p) {
+        if (*p == '\\') *p = '/';
+    }
+
     #ifdef _USE_WAV_
-        sprintf(filename, "Sounds\\%s\\%s.wav", m_language, file);
+        sprintf(filename, "Sounds/%s/%s.wav", m_language, fileCopy);
         DirectX::Sound* result = m_soundManager->create(filename, threeD);
     #else
-        sprintf(filename, "Sounds\\%s\\%s.ogg", m_language, file);
+        sprintf(filename, "Sounds/%s/%s.ogg", m_language, fileCopy);
         DirectX::Sound* result = m_soundManager->createVorbis(filename, threeD);
     #endif
     if (!ignoreNonexistence)
     {
         if (result == 0)
         {
-            sprintf(filename, "Sounds\\en\\%s.ogg", file);
+            sprintf(filename, "Sounds/en/%s.ogg", fileCopy);
             result = m_soundManager->createVorbis(filename, threeD);
         }
         if (result == 0)

@@ -32,6 +32,32 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "emscripten-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CROSSCOMPILING_EMULATOR": "$env{EMSDK}/node/22.16.0_64bit/bin/node.exe"
+      }
+    },
+    {
+      "name": "emscripten-debug",
+      "displayName": "Emscripten Debug",
+      "inherits": "emscripten-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "emscripten-release",
+      "displayName": "Emscripten Release",
+      "inherits": "emscripten-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ],
   "buildPresets": [
@@ -44,6 +70,14 @@
       "name": "vs2022-release",
       "configurePreset": "vs2022-release",
       "configuration": "Release"
+    },
+    {
+      "name": "emscripten-debug",
+      "configurePreset": "emscripten-debug"
+    },
+    {
+      "name": "emscripten-release",
+      "configurePreset": "emscripten-release"
     }
   ]
 }

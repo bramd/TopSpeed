@@ -16,6 +16,11 @@
 #include <vector>
 #include <mutex>
 
+// Case-insensitive string compare - use strcasecmp on non-Windows
+#ifdef _WIN32
+#define strcasecmp _stricmp
+#endif
+
 // stb_vorbis for OGG file loading
 #define STB_VORBIS_HEADER_ONLY
 #include "stb_vorbis.c"
@@ -729,12 +734,12 @@ static SDL2SoundData* loadAudioFile(const char* filename)
     // Check file extension
     const char* ext = strrchr(filename, '.');
 
-    if (ext && (_stricmp(ext, ".ogg") == 0))
+    if (ext && (strcasecmp(ext, ".ogg") == 0))
     {
         // OGG file - use stb_vorbis
         return loadOggFile(filename);
     }
-    else if (ext && (_stricmp(ext, ".wav") == 0))
+    else if (ext && (strcasecmp(ext, ".wav") == 0))
     {
         // WAV file - use SDL_LoadWAV
         return loadWavFile(filename);

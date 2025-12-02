@@ -34,6 +34,28 @@
 #include <Common/If/Mutex.h>
 #include <Common/If/Network.h>
 
+// Emscripten compatibility functions
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <cstring>
+#include <cctype>
+
+// Sleep replacement - in WASM this is a no-op (will need ASYNCIFY for real async sleep)
+inline void Sleep(unsigned int ms) {
+    // No-op in WASM - the main loop will handle timing
+    // With ASYNCIFY, we could use emscripten_sleep(ms) here
+    (void)ms;
+}
+
+// _strlwr replacement - lowercase string in place
+inline char* _strlwr(char* str) {
+    for (char* p = str; *p; ++p) {
+        *p = tolower(*p);
+    }
+    return str;
+}
+#endif
+
 
 class Tracer;
 

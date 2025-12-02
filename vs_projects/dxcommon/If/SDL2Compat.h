@@ -10,12 +10,150 @@
 
 #ifdef TOPSPEED_USE_SDL2
 
-// Include Windows headers first - they define types like WAVEFORMATEX
-// that we don't want to redefine
+#include <SDL.h>
+
+#ifdef __EMSCRIPTEN__
+// Emscripten/WASM - provide stub types for Windows-specific types
+#include <cstdint>
+
+typedef uint32_t DWORD;
+typedef uint16_t WORD;
+typedef int32_t LONG;
+typedef int BOOL;
+typedef unsigned int UINT;
+typedef void* HWND;
+typedef long HRESULT;
+typedef char CHAR;
+typedef wchar_t WCHAR;
+typedef CHAR TCHAR;
+typedef void* HANDLE;
+typedef void* HMODULE;
+typedef void* HINSTANCE;
+typedef void* LPVOID;
+typedef const void* LPCVOID;
+typedef void VOID;
+typedef unsigned char BYTE;
+typedef float FLOAT;
+typedef long LRESULT;
+typedef uintptr_t WPARAM;
+typedef intptr_t LPARAM;
+typedef int64_t LONGLONG;
+typedef char* LPSTR;
+typedef const char* LPCSTR;
+
+// LARGE_INTEGER for timer functions
+typedef union _LARGE_INTEGER {
+    struct {
+        DWORD LowPart;
+        LONG HighPart;
+    } u;
+    LONGLONG QuadPart;
+} LARGE_INTEGER;
+
+// CALLBACK/WINAPI macros (used for Windows callback functions)
+#define CALLBACK
+#define WINAPI
+
+// MAX_PATH for path buffers
+#ifndef MAX_PATH
+#define MAX_PATH 260
+#endif
+
+// SIZE structure
+typedef struct tagSIZE {
+    LONG cx;
+    LONG cy;
+} SIZE;
+
+// GUID structure for DirectX compatibility
+typedef struct _GUID {
+    DWORD Data1;
+    WORD Data2;
+    WORD Data3;
+    unsigned char Data4[8];
+} GUID;
+
+// WAVEFORMATEX for audio format compatibility
+typedef struct tWAVEFORMATEX {
+    WORD wFormatTag;
+    WORD nChannels;
+    DWORD nSamplesPerSec;
+    DWORD nAvgBytesPerSec;
+    WORD nBlockAlign;
+    WORD wBitsPerSample;
+    WORD cbSize;
+} WAVEFORMATEX;
+typedef WAVEFORMATEX* LPWAVEFORMATEX;
+
+// MMIO types for WAV file handling (stub - not actually used in WASM)
+typedef void* HMMIO;
+typedef struct {
+    DWORD ckid;
+    DWORD cksize;
+    DWORD fccType;
+    DWORD dwDataOffset;
+    DWORD dwFlags;
+} MMCKINFO;
+typedef struct {
+    DWORD dwFlags;
+} MMIOINFO;
+
+// Common Windows constants
+#ifndef FALSE
+#define FALSE 0
+#endif
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+// COM-style return codes
+#ifndef S_OK
+#define S_OK ((HRESULT)0)
+#endif
+#ifndef E_FAIL
+#define E_FAIL ((HRESULT)0x80004005)
+#endif
+
+// Windows error codes
+#define ERROR_NO_MORE_FILES 18L
+
+// File finding stubs for WASM (will use Emscripten filesystem)
+#define INVALID_HANDLE_VALUE ((HANDLE)(intptr_t)-1)
+
+typedef struct _WIN32_FIND_DATA {
+    DWORD dwFileAttributes;
+    DWORD ftCreationTime[2];
+    DWORD ftLastAccessTime[2];
+    DWORD ftLastWriteTime[2];
+    DWORD nFileSizeHigh;
+    DWORD nFileSizeLow;
+    DWORD dwReserved0;
+    DWORD dwReserved1;
+    CHAR  cFileName[MAX_PATH];
+    CHAR  cAlternateFileName[14];
+} WIN32_FIND_DATA;
+typedef WIN32_FIND_DATA* LPWIN32_FIND_DATA;
+
+// Stub implementations - will need to be replaced with Emscripten filesystem calls
+inline HANDLE FindFirstFile(const char* pattern, WIN32_FIND_DATA* data) {
+    (void)pattern; (void)data;
+    return INVALID_HANDLE_VALUE; // Not implemented yet
+}
+inline BOOL FindNextFile(HANDLE handle, WIN32_FIND_DATA* data) {
+    (void)handle; (void)data;
+    return FALSE;
+}
+inline BOOL FindClose(HANDLE handle) {
+    (void)handle;
+    return TRUE;
+}
+inline DWORD GetLastError() { return ERROR_NO_MORE_FILES; }
+
+#else
+// Windows - include Windows headers for real types
 #include <windows.h>
 #include <mmsystem.h>  // For WAVEFORMATEX, HMMIO, MMCKINFO, etc.
-
-#include <SDL.h>
+#endif
 
 // =============================================================================
 // DirectSound stub types - these aren't in Windows SDK so we need to define them

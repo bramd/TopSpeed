@@ -4,15 +4,17 @@
 * Code contributors: Davy Kager, Davy Loots and Leonard de Ruijter
 * This program is distributed under the terms of the GNU General Public License version 3.
 */
+#ifndef __EMSCRIPTEN__
 #include <Windows.h>
+#endif
 #include <DxCommon/If/Common.h>
 #include <Common/If/Common.h>
 
 
-#ifndef DXCOMMON_STATIC
+#if !defined(DXCOMMON_STATIC) && !defined(__EMSCRIPTEN__)
 
-BOOL APIENTRY DllMain( HANDLE hModule, 
-                       DWORD  ul_reason_for_call, 
+BOOL APIENTRY DllMain( HANDLE hModule,
+                       DWORD  ul_reason_for_call,
                        LPVOID lpReserved
 					 )
 {

@@ -9,7 +9,9 @@
 
 #include <DxCommon/If/Common.h>
 
+#ifndef __EMSCRIPTEN__
 #include <tchar.h>
+#endif
 
 #ifdef TOPSPEED_USE_SDL2
 #include <DxCommon/If/SDL2Compat.h>

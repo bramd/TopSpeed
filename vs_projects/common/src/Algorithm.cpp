@@ -6,6 +6,7 @@
 */
 #include <Common/If/Common.h>
 #include <time.h>
+#include <cstdlib>
 
 Int 
 random(Int max)

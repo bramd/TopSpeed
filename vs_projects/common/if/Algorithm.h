@@ -7,6 +7,11 @@
 #ifndef __COMMON_ALGORITHM_H__
 #define __COMMON_ALGORITHM_H__
 
+#ifdef __EMSCRIPTEN__
+#include <cstdint>
+typedef uint32_t DWORD;
+#endif
+
 template <class Type>
 inline const Type& minimum(const Type& a, const Type& b)
 {
