@@ -592,9 +592,30 @@ void SDLCALL AudioMixer::audioCallback(void* userdata, Uint8* stream, int len)
             left *= ch.volume * MASTER_GAIN;
             right *= ch.volume * MASTER_GAIN;
 
-            // Apply pan (-1 = full left, +1 = full right)
-            float leftGain = 1.0f - (std::max)(0.0f, ch.pan);
-            float rightGain = 1.0f + (std::min)(0.0f, ch.pan);
+            // Apply pan using dB-based attenuation (matches DirectSound behavior)
+            // DirectSound uses -10000 to +10000 representing -100dB to +100dB attenuation
+            // pan: -1.0 (full left) to +1.0 (full right)
+            // At full pan, opposite channel is attenuated by 100dB (essentially silent)
+            float leftGain, rightGain;
+            if (ch.pan > 0.0f)
+            {
+                // Panning right: attenuate left channel
+                float attenuateLeftDb = ch.pan * 100.0f;  // 0 to 100 dB
+                leftGain = powf(10.0f, -attenuateLeftDb / 20.0f);
+                rightGain = 1.0f;
+            }
+            else if (ch.pan < 0.0f)
+            {
+                // Panning left: attenuate right channel
+                float attenuateRightDb = -ch.pan * 100.0f;  // 0 to 100 dB
+                leftGain = 1.0f;
+                rightGain = powf(10.0f, -attenuateRightDb / 20.0f);
+            }
+            else
+            {
+                leftGain = 1.0f;
+                rightGain = 1.0f;
+            }
             left *= leftGain;
             right *= rightGain;
 
