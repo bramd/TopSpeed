@@ -396,7 +396,7 @@ ComputerPlayer::run(Float elapsed, Int playerX, Int playerY)
 
     // Handle events
     Event* e = 0;
-    while (e = m_eventList.next(e))
+    while ((e = m_eventList.next(e)))
     {
         if (e->time < m_game->currentTime( ))
         {

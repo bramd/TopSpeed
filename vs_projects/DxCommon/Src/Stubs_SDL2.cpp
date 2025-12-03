@@ -100,7 +100,7 @@ SIZE D3DFont::size(Char* text)
 // Mesh Stubs - 3D mesh rendering not supported in SDL2 mode
 // ============================================================================
 
-Mesh::Mesh(Char* name)
+Mesh::Mesh(const Char* name)
     : m_sysMemMesh(nullptr)
     , m_localMesh(nullptr)
     , m_nMaterials(0)
@@ -217,7 +217,7 @@ Int Mesh::setTexture(LPDIRECT3DDEVICE8 d3dDevice, Char* filename)
 // Frame Stubs
 // ============================================================================
 
-Frame::Frame(Char* name)
+Frame::Frame(const Char* name)
     : m_mesh(nullptr)
     , m_next(nullptr)
     , m_child(nullptr)

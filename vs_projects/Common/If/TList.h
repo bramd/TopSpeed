@@ -39,7 +39,7 @@ template <class Type> TList<Type>::~TList( )
     COMMON("(-) TList");
     Type* t1 = m_first;
     Type* t2;
-    while (t2 = next(t1))
+    while ((t2 = next(t1)))
     {
         purge(t1);
         t1 = t2;

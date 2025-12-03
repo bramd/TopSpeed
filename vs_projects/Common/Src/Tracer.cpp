@@ -51,10 +51,10 @@ void Tracer::trace(const Char* fmt, ...)
         va_end(args);
         if (m_file)
         {
-            fprintf(m_file->getStream(), buffer);
+            fprintf(m_file->getStream(), "%s", buffer);
             fflush(m_file->getStream());
         }
         else
-            printf(buffer);
+            printf("%s", buffer);
     }
 }

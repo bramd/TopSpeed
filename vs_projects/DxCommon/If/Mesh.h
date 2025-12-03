@@ -43,7 +43,7 @@ struct DEFAULTVERTEX
 class Mesh : public DeviceDependent
 {
 public:
-    _dxcommon_ Mesh(Char* name = "DirectX::Mesh");
+    _dxcommon_ Mesh(const Char* name = "DirectX::Mesh");
     _dxcommon_ virtual ~Mesh();
 
 public:
@@ -119,7 +119,7 @@ public:
 class Frame : public DeviceDependent
 {
 public:
-    _dxcommon_ Frame(Char* name = "DirectX::Frame");
+    _dxcommon_ Frame(const Char* name = "DirectX::Frame");
     _dxcommon_ virtual ~Frame();
 
 public:
@@ -173,7 +173,7 @@ public:
     // specified on pure devices, this function will fail.
     _dxcommon_ Int render(LPDIRECT3DDEVICE8 d3dDevice, D3DXMATRIX* matWorldMatrix = NULL);
 
-    MeshFile( ) : Frame("MeshFile")   { }
+    MeshFile( ) : Frame(static_cast<const Char*>("MeshFile"))   { }
 };
 
 

@@ -63,4 +63,4 @@ private:
 };
 
 
-#endif __COMMON_FILE_H__
+#endif // __COMMON_FILE_H__

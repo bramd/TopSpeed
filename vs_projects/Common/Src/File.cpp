@@ -37,19 +37,27 @@ File::File(const Char filename[], UInt flags) :
     if (flags & append)
     {
         if ((flags & read) && (flags & write))
+        {
             if ((m_file = fopen( filename, "a+" )) == 0 )
             {
                 COMMON("(!) Error opening file %s", filename);
             }
             else
+            {
                 m_opened = true;
+            }
+        }
         else if (flags & read)
+        {
             if ((m_file = fopen( filename, "r" )) == 0 )
             {
                 COMMON("(!) Error opening file %s", filename);
             }
             else
+            {
                 m_opened = true;
+            }
+        }
     }
     else
     {
@@ -62,25 +70,33 @@ File::File(const Char filename[], UInt flags) :
                     COMMON("(!) Error opening file %s", filename);
                 }
                 else
+                {
                     m_opened = true;
-            }  
-            else 
+                }
+            }
+            else
             {
                 if ((m_file = fopen( filename, "r+" )) == 0 )
                 {
                     COMMON("(!) Error opening file %s", filename);
                 }
                 else
+                {
                     m_opened = true;
+                }
             }
         }
         else if (flags & read)
+        {
             if ((m_file = fopen( filename, "r" )) == 0 )
             {
                 COMMON("(!) Error opening file %s", filename);
             }
             else
+            {
                 m_opened = true;
+            }
+        }
     }
 }       
 
@@ -103,7 +119,7 @@ void File::writeInt(Int i)
 {
     char buffer[512];
     sprintf_s(buffer, "%i\n", i);
-    fprintf(m_file, buffer);
+    fprintf(m_file, "%s", buffer);
 }
 
 
@@ -122,14 +138,14 @@ void File::writeFloat(Float f)
 {
     char buffer[512];
     sprintf_s(buffer, "%f\n", f);
-    fprintf(m_file, buffer);
+    fprintf(m_file, "%s", buffer);
 }
 
 
 
 void File::writeString(Char* string)
 {
-    fprintf(m_file, string);
+    fprintf(m_file, "%s", string);
 }
 
 
@@ -146,7 +162,7 @@ void File::writeChar(Char c)
 {
     char buffer[3];
     sprintf_s(buffer, "%c", c);
-    fprintf(m_file, buffer);
+    fprintf(m_file, "%s", buffer);
 }
 
 
