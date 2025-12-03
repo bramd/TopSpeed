@@ -34,7 +34,10 @@ extern Tracer dxTracer;
 extern Tracer _raceTracer;
 
 #ifdef __EMSCRIPTEN__
-// JavaScript functions for IDBFS persistence using EM_JS
+// Flag to track if IDBFS initialization is complete
+static bool g_idbfsReady = false;
+
+// JavaScript function to copy files from root to /persist and sync
 EM_JS(void, js_syncFilesToPersist, (), {
     var files = ['TopSpeed.bin', 'TopSpeed.cfg', 'highscore.cfg'];
     for (var i = 0; i < files.length; i++) {
@@ -56,7 +59,8 @@ EM_JS(void, js_syncFilesToPersist, (), {
     });
 });
 
-EM_JS(void, js_initIDBFS, (), {
+// JavaScript function to mount IDBFS - non-blocking, sets up callback
+EM_JS(void, js_mountIDBFS, (), {
     try {
         FS.mkdir('/persist');
     } catch (e) {
@@ -64,27 +68,35 @@ EM_JS(void, js_initIDBFS, (), {
     }
 
     FS.mount(FS.filesystems.IDBFS || IDBFS, {}, '/persist');
+    console.log('IDBFS mounted on /persist');
+});
 
-    Asyncify.handleSleep(function(wakeUp) {
-        FS.syncfs(true, function(err) {
-            if (err) {
-                console.error('Failed to load from IndexedDB:', err);
-            } else {
-                console.log('Loaded persisted data from IndexedDB');
-                var files = ['TopSpeed.bin', 'TopSpeed.cfg', 'highscore.cfg'];
-                for (var i = 0; i < files.length; i++) {
-                    var filename = files[i];
-                    try {
-                        var data = FS.readFile('/persist/' + filename);
-                        FS.writeFile('/' + filename, data);
-                        console.log('Restored ' + filename + ' from /persist/');
-                    } catch (e) {
-                        // File doesn't exist in IndexedDB yet, skip
-                    }
+// JavaScript function to check if IDBFS sync is complete
+EM_JS(int, js_isIDBFSReady, (), {
+    return Module._idbfsSyncComplete ? 1 : 0;
+});
+
+// JavaScript function to start async IDBFS sync and copy files when done
+EM_JS(void, js_startIDBFSSync, (), {
+    Module._idbfsSyncComplete = false;
+    FS.syncfs(true, function(err) {
+        if (err) {
+            console.error('Failed to load from IndexedDB:', err);
+        } else {
+            console.log('Loaded persisted data from IndexedDB');
+            var files = ['TopSpeed.bin', 'TopSpeed.cfg', 'highscore.cfg'];
+            for (var i = 0; i < files.length; i++) {
+                var filename = files[i];
+                try {
+                    var data = FS.readFile('/persist/' + filename);
+                    FS.writeFile('/' + filename, data);
+                    console.log('Restored ' + filename + ' from /persist/');
+                } catch (e) {
+                    // File doesn't exist in IndexedDB yet, skip
                 }
             }
-            wakeUp();
-        });
+        }
+        Module._idbfsSyncComplete = true;
     });
 });
 
@@ -98,11 +110,19 @@ extern "C" {
     }
 }
 
-// Initialize IDBFS and load persisted data synchronously using ASYNCIFY
+// Initialize IDBFS - mounts and starts async sync
 static void initializeIDBFS()
 {
     printf("Initializing IDBFS for persistent storage...\n");
-    js_initIDBFS();
+    js_mountIDBFS();
+    js_startIDBFSSync();
+
+    // Wait for IDBFS sync to complete using emscripten_sleep
+    // This works with ASYNCIFY to yield control back to browser
+    while (!js_isIDBFSReady()) {
+        emscripten_sleep(10);
+    }
+
     printf("IDBFS initialized\n");
 }
 #endif
