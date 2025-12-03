@@ -33,6 +33,50 @@ extern Tracer commonTracer;
 extern Tracer dxTracer;
 extern Tracer _raceTracer;
 
+#ifdef __EMSCRIPTEN__
+// Sync the Emscripten filesystem to IndexedDB for persistence
+// Call this after writing settings, highscores, etc.
+extern "C" {
+    EMSCRIPTEN_KEEPALIVE
+    void syncFilesystemToIndexedDB()
+    {
+        EM_ASM(
+            FS.syncfs(false, function(err) {
+                if (err) {
+                    console.error('Failed to sync filesystem to IndexedDB:', err);
+                } else {
+                    console.log('Filesystem synced to IndexedDB');
+                }
+            });
+        );
+    }
+}
+
+// Initialize IDBFS and load persisted data synchronously using ASYNCIFY
+static void initializeIDBFS()
+{
+    printf("Initializing IDBFS for persistent storage...\n");
+    EM_ASM(
+        // Mount IDBFS on the current working directory
+        FS.mount(IDBFS, {}, '/');
+
+        // Sync FROM IndexedDB to memory (populate = true)
+        // Using Asyncify to make this synchronous
+        Asyncify.handleSleep(function(wakeUp) {
+            FS.syncfs(true, function(err) {
+                if (err) {
+                    console.error('Failed to load from IndexedDB:', err);
+                } else {
+                    console.log('Loaded persisted data from IndexedDB');
+                }
+                wakeUp();
+            });
+        });
+    );
+    printf("IDBFS initialized\n");
+}
+#endif
+
 // Main loop function for emscripten_set_main_loop
 void main_loop_iteration()
 {
@@ -82,7 +126,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
-#ifndef __EMSCRIPTEN__
+#ifdef __EMSCRIPTEN__
+    // Initialize IDBFS for persistent storage (settings, highscores)
+    // This must happen before reading any config files
+    initializeIDBFS();
+#else
     // Check for single instance (Windows only)
     HANDLE mutex = CreateMutexA(NULL, FALSE, "TSpeed_3");
     if (GetLastError() == ERROR_ALREADY_EXISTS)
@@ -109,6 +157,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             fprintf(settings->getStream(), "[Settings]\n");
             settings->writeKeyInt("EnableTracing", enableTracing);
             settings->writeKeyString("Multiplayer", "127.0.0.1");
+#ifdef __EMSCRIPTEN__
+            // Sync new config file to IndexedDB
+            syncFilesystemToIndexedDB();
+#endif
         }
     }
     SAFE_DELETE(settings);

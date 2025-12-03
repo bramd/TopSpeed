@@ -8,6 +8,11 @@
 #include "Game.h"
 #include "Common/If/Algorithm.h"
 
+#ifdef __EMSCRIPTEN__
+// Defined in Main_SDL2.cpp - syncs filesystem to IndexedDB
+extern "C" void syncFilesystemToIndexedDB();
+#endif
+
 #define KeyLeft         0xcb
 #define KeyRight        0xcd
 #define KeyUp           0xc8
@@ -200,6 +205,11 @@ settingsFile.writeKeyString("lang", language);
     settingsFile.writeInt((Int) randomCustomTracks);
     settingsFile.writeInt((Int) randomCustomVehicles);
     settingsFile.writeInt((Int) singleRaceCustomVehicles);
+
+#ifdef __EMSCRIPTEN__
+    // Sync settings to IndexedDB for persistence across sessions
+    syncFilesystemToIndexedDB();
+#endif
 }
 
 

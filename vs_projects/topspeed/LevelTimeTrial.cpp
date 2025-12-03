@@ -6,6 +6,11 @@
 */
 #include "LevelTimeTrial.h"
 
+#ifdef __EMSCRIPTEN__
+// Defined in Main_SDL2.cpp - syncs filesystem to IndexedDB
+extern "C" void syncFilesystemToIndexedDB();
+#endif
+
 
 const Char highscoreFile[] = "highscore.cfg";
 
@@ -297,6 +302,11 @@ LevelTimeTrial::writeHighScore(/*  Track* track, Int time */)
     file->writeKeyInt(trackLaps, m_raceTime); 
     // file.writeKeyInt(track->trackName( ), time); 
     SAFE_DELETE(file);
+
+#ifdef __EMSCRIPTEN__
+    // Sync highscores to IndexedDB for persistence across sessions
+    syncFilesystemToIndexedDB();
+#endif
 }
 
 
