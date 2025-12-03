@@ -58,7 +58,7 @@ static void initializeIDBFS()
     printf("Initializing IDBFS for persistent storage...\n");
     EM_ASM(
         // Mount IDBFS on the current working directory
-        FS.mount(IDBFS, {}, '/');
+        FS.mount(FS.filesystems.IDBFS || IDBFS, {}, '/');
 
         // Sync FROM IndexedDB to memory (populate = true)
         // Using Asyncify to make this synchronous

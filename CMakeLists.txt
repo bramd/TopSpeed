@@ -25,6 +25,8 @@ if(EMSCRIPTEN)
 
     # ASYNCIFY for synchronous file loading support
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ASYNCIFY=1")
+    # Include IDBFS for persistent storage to IndexedDB
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lidbfs.js")
 
     # Allow memory growth for audio buffers
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ALLOW_MEMORY_GROWTH=1")
