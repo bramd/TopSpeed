@@ -34,32 +34,67 @@ extern Tracer dxTracer;
 extern Tracer _raceTracer;
 
 #ifdef __EMSCRIPTEN__
+// JavaScript functions for IDBFS persistence using EM_JS
+EM_JS(void, js_syncFilesToPersist, (), {
+    var files = ['TopSpeed.bin', 'TopSpeed.cfg', 'highscore.cfg'];
+    for (var i = 0; i < files.length; i++) {
+        var filename = files[i];
+        try {
+            var data = FS.readFile('/' + filename);
+            FS.writeFile('/persist/' + filename, data);
+            console.log('Copied ' + filename + ' to /persist/');
+        } catch (e) {
+            // File doesn't exist, skip
+        }
+    }
+    FS.syncfs(false, function(err) {
+        if (err) {
+            console.error('Failed to sync filesystem to IndexedDB:', err);
+        } else {
+            console.log('Filesystem synced to IndexedDB');
+        }
+    });
+});
+
+EM_JS(void, js_initIDBFS, (), {
+    try {
+        FS.mkdir('/persist');
+    } catch (e) {
+        // Directory may already exist
+    }
+
+    FS.mount(FS.filesystems.IDBFS || IDBFS, {}, '/persist');
+
+    Asyncify.handleSleep(function(wakeUp) {
+        FS.syncfs(true, function(err) {
+            if (err) {
+                console.error('Failed to load from IndexedDB:', err);
+            } else {
+                console.log('Loaded persisted data from IndexedDB');
+                var files = ['TopSpeed.bin', 'TopSpeed.cfg', 'highscore.cfg'];
+                for (var i = 0; i < files.length; i++) {
+                    var filename = files[i];
+                    try {
+                        var data = FS.readFile('/persist/' + filename);
+                        FS.writeFile('/' + filename, data);
+                        console.log('Restored ' + filename + ' from /persist/');
+                    } catch (e) {
+                        // File doesn't exist in IndexedDB yet, skip
+                    }
+                }
+            }
+            wakeUp();
+        });
+    });
+});
+
 // Sync the Emscripten filesystem to IndexedDB for persistence
 // Call this after writing settings, highscores, etc.
 extern "C" {
     EMSCRIPTEN_KEEPALIVE
     void syncFilesystemToIndexedDB()
     {
-        EM_ASM({
-            var files = ['TopSpeed.bin', 'TopSpeed.cfg', 'highscore.cfg'];
-            for (var i = 0; i < files.length; i++) {
-                var filename = files[i];
-                try {
-                    var data = FS.readFile('/' + filename);
-                    FS.writeFile('/persist/' + filename, data);
-                    console.log('Copied ' + filename + ' to /persist/');
-                } catch (e) {
-                    /* File doesn't exist, skip */
-                }
-            }
-            FS.syncfs(false, function(err) {
-                if (err) {
-                    console.error('Failed to sync filesystem to IndexedDB:', err);
-                } else {
-                    console.log('Filesystem synced to IndexedDB');
-                }
-            });
-        });
+        js_syncFilesToPersist();
     }
 }
 
@@ -67,37 +102,7 @@ extern "C" {
 static void initializeIDBFS()
 {
     printf("Initializing IDBFS for persistent storage...\n");
-    EM_ASM({
-        try {
-            FS.mkdir('/persist');
-        } catch (e) {
-            /* Directory may already exist */
-        }
-
-        FS.mount(FS.filesystems.IDBFS || IDBFS, {}, '/persist');
-
-        Asyncify.handleSleep(function(wakeUp) {
-            FS.syncfs(true, function(err) {
-                if (err) {
-                    console.error('Failed to load from IndexedDB:', err);
-                } else {
-                    console.log('Loaded persisted data from IndexedDB');
-                    var files = ['TopSpeed.bin', 'TopSpeed.cfg', 'highscore.cfg'];
-                    for (var i = 0; i < files.length; i++) {
-                        var filename = files[i];
-                        try {
-                            var data = FS.readFile('/persist/' + filename);
-                            FS.writeFile('/' + filename, data);
-                            console.log('Restored ' + filename + ' from /persist/');
-                        } catch (e) {
-                            /* File doesn't exist in IndexedDB yet, skip */
-                        }
-                    }
-                }
-                wakeUp();
-            });
-        });
-    });
+    js_initIDBFS();
     printf("IDBFS initialized\n");
 }
 #endif
