@@ -971,15 +971,22 @@ Int Sound::play(UInt priority, Boolean looped)
             if (looped)
             {
                 // For looped sounds, restart from beginning
-                dxTracer.trace("Sound::play - stopping looped sound to restart");
+                dxTracer.trace("Sound::play(looped=%d) - ch %d still active, stopping to restart, vol=%.4f",
+                    looped, data->channel, data->volume);
                 stop();
             }
-            // For non-looped, allocate a new channel (allows overlapping playback)
-            // Don't stop the existing one - let it finish naturally
+            else
+            {
+                // For non-looped, allocate a new channel (allows overlapping playback)
+                dxTracer.trace("Sound::play(looped=%d) - ch %d still active, will allocate new channel",
+                    looped, data->channel);
+            }
         }
         else
         {
             // Channel finished or was reused by another sound - clear our stale reference
+            dxTracer.trace("Sound::play(looped=%d) - ch %d stale (ch=%p, active=%d, owner match=%d), clearing",
+                looped, data->channel, ch, ch ? ch->active : 0, ch ? (ch->owner == this ? 1 : 0) : 0);
             data->channel = -1;
         }
     }
@@ -1133,10 +1140,17 @@ void Sound::volume(Int value)
         vol = powf(10.0f, -attenuationDb / 20.0f);
     }
 
+    float oldVol = data->volume;
     data->volume = vol;
 
+    dxTracer.trace("Sound::volume(%d) - linear=%.4f (was %.4f), ch=%d",
+        value, vol, oldVol, data->channel);
+
     if (data->channel >= 0)
+    {
         AudioMixer::instance()->setChannelVolume(data->channel, vol, this);
+        dxTracer.trace("  -> applied to channel %d", data->channel);
+    }
 }
 
 Int Sound::volume()
