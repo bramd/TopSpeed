@@ -20,7 +20,16 @@ namespace DirectX
 
 static bool g_sdlInputInitialized = false;
 static SDL_Joystick* g_joystick = nullptr;
+static SDL_GameController* g_gameController = nullptr;
 static SDL_Haptic* g_haptic = nullptr;
+static bool g_useControllerRumble = false;  // Use SDL_GameControllerRumble instead of SDL_Haptic
+
+// Controller rumble parameters for different effect types
+struct RumbleParams {
+    Uint16 lowFreq;   // Low frequency motor (0-65535)
+    Uint16 highFreq;  // High frequency motor (0-65535)
+    Uint32 duration;  // Duration in milliseconds (0 = infinite)
+};
 
 //-----------------------------------------------------------------------------
 // Keyboard Implementation
@@ -318,10 +327,9 @@ Int InputManager::initialize(Window::Handle handle)
 
     if (!g_sdlInputInitialized)
     {
-        if (SDL_InitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) < 0)
+        if (SDL_InitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC) < 0)
         {
-            dxTracer.trace("SDL_InitSubSystem(JOYSTICK|HAPTIC) failed: %s", SDL_GetError());
-            // Continue without joystick
+            dxTracer.trace("SDL_InitSubSystem failed: %s", SDL_GetError());
         }
         g_sdlInputInitialized = true;
     }
@@ -336,8 +344,42 @@ Int InputManager::initialize(Window::Handle handle)
 
     if (numJoysticks > 0)
     {
-        g_joystick = SDL_JoystickOpen(0);
-        if (g_joystick)
+        // Try to open as game controller first (better XInput support)
+        if (SDL_IsGameController(0))
+        {
+            g_gameController = SDL_GameControllerOpen(0);
+            if (g_gameController)
+            {
+                g_joystick = SDL_GameControllerGetJoystick(g_gameController);
+                m_joystick = new Joystick(nullptr);
+
+                const char* name = SDL_GameControllerName(g_gameController);
+                dxTracer.trace("InputManager: Opened game controller: %s", name ? name : "Unknown");
+
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+                // SDL 2.0.18+ has SDL_GameControllerHasRumble
+                if (SDL_GameControllerHasRumble(g_gameController))
+                {
+                    m_joystick->FFcapable(true);
+                    g_useControllerRumble = true;
+                    dxTracer.trace("InputManager: Controller rumble available");
+                }
+#else
+                // Older SDL - assume XInput controllers have rumble
+                m_joystick->FFcapable(true);
+                g_useControllerRumble = true;
+                dxTracer.trace("InputManager: Controller rumble assumed available");
+#endif
+            }
+        }
+
+        // Fall back to joystick API if not a game controller
+        if (!g_joystick)
+        {
+            g_joystick = SDL_JoystickOpen(0);
+        }
+
+        if (g_joystick && !m_joystick)
         {
             m_joystick = new Joystick(nullptr);
 
@@ -347,22 +389,21 @@ Int InputManager::initialize(Window::Handle handle)
                           SDL_JoystickNumAxes(g_joystick),
                           SDL_JoystickNumButtons(g_joystick),
                           SDL_JoystickNumHats(g_joystick));
+        }
 
-            // Check for force feedback
-            if (SDL_JoystickIsHaptic(g_joystick))
+        // Check for SDL_Haptic (DirectInput force feedback devices)
+        if (g_joystick && !g_useControllerRumble && SDL_JoystickIsHaptic(g_joystick))
+        {
+            g_haptic = SDL_HapticOpenFromJoystick(g_joystick);
+            if (g_haptic)
             {
-                g_haptic = SDL_HapticOpenFromJoystick(g_joystick);
-                if (g_haptic)
-                {
-                    m_joystick->FFcapable(true);
-                    unsigned int supported = SDL_HapticQuery(g_haptic);
-                    dxTracer.trace("InputManager: Haptic feedback available (0x%X)", supported);
+                m_joystick->FFcapable(true);
+                unsigned int supported = SDL_HapticQuery(g_haptic);
+                dxTracer.trace("InputManager: Haptic feedback available (0x%X)", supported);
 
-                    // Initialize rumble if supported
-                    if (SDL_HapticRumbleSupported(g_haptic))
-                    {
-                        SDL_HapticRumbleInit(g_haptic);
-                    }
+                if (SDL_HapticRumbleSupported(g_haptic))
+                {
+                    SDL_HapticRumbleInit(g_haptic);
                 }
             }
         }
@@ -389,7 +430,14 @@ void InputManager::finalize()
         g_haptic = nullptr;
     }
 
-    if (g_joystick)
+    if (g_gameController)
+    {
+        SDL_GameControllerClose(g_gameController);
+        g_gameController = nullptr;
+        g_joystick = nullptr;  // Joystick is owned by controller
+        g_useControllerRumble = false;
+    }
+    else if (g_joystick)
     {
         SDL_JoystickClose(g_joystick);
         g_joystick = nullptr;
@@ -397,7 +445,7 @@ void InputManager::finalize()
 
     if (g_sdlInputInitialized)
     {
-        SDL_QuitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC);
+        SDL_QuitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC);
         g_sdlInputInitialized = false;
     }
 
@@ -438,7 +486,16 @@ Int InputManager::update()
                     SDL_HapticClose(g_haptic);
                     g_haptic = nullptr;
                 }
-                SDL_JoystickClose(g_joystick);
+                if (g_gameController)
+                {
+                    SDL_GameControllerClose(g_gameController);
+                    g_gameController = nullptr;
+                    g_useControllerRumble = false;
+                }
+                else
+                {
+                    SDL_JoystickClose(g_joystick);
+                }
                 g_joystick = nullptr;
             }
         }
@@ -551,6 +608,71 @@ BOOL CALLBACK InputManager::enumKeyboardsCallback(const DIDEVICEINSTANCE* pdidIn
 // ForceFeedbackEffect Implementation
 //-----------------------------------------------------------------------------
 
+// Helper function to get rumble parameters for an effect type
+static RumbleParams getRumbleParams(const char* effectName)
+{
+    RumbleParams params = {0, 0, 0};
+
+    if (strstr(effectName, "crash") != nullptr)
+    {
+        // Strong rumble for crash - both motors at high intensity
+        params.lowFreq = 65535;
+        params.highFreq = 65535;
+        params.duration = 500;
+    }
+    else if (strstr(effectName, "bumpleft") != nullptr || strstr(effectName, "bumpright") != nullptr)
+    {
+        // Medium bump effect
+        params.lowFreq = 48000;
+        params.highFreq = 32000;
+        params.duration = 150;
+    }
+    else if (strstr(effectName, "curbleft") != nullptr || strstr(effectName, "curbright") != nullptr)
+    {
+        // Continuous vibration for curb riding - use high freq motor for texture
+        params.lowFreq = 16000;
+        params.highFreq = 32000;
+        params.duration = 0;  // Continuous until stopped
+    }
+    else if (strstr(effectName, "engine") != nullptr)
+    {
+        // Low frequency rumble for engine vibration
+        params.lowFreq = 16000;
+        params.highFreq = 8000;
+        params.duration = 0;  // Continuous until stopped
+    }
+    else if (strstr(effectName, "spring") != nullptr)
+    {
+        // Spring effect - not directly translatable to rumble, use light feedback
+        params.lowFreq = 8000;
+        params.highFreq = 4000;
+        params.duration = 0;
+    }
+    else if (strstr(effectName, "carstart") != nullptr)
+    {
+        // Car starting - medium intensity, short duration
+        params.lowFreq = 40000;
+        params.highFreq = 20000;
+        params.duration = 800;
+    }
+    else if (strstr(effectName, "gravel") != nullptr)
+    {
+        // Gravel surface - high frequency texture
+        params.lowFreq = 12000;
+        params.highFreq = 24000;
+        params.duration = 0;  // Continuous until stopped
+    }
+    else
+    {
+        // Generic effect
+        params.lowFreq = 32000;
+        params.highFreq = 32000;
+        params.duration = 300;
+    }
+
+    return params;
+}
+
 ForceFeedbackEffect::ForceFeedbackEffect(Joystick* joystick)
     : m_joystick(joystick)
 {
@@ -559,12 +681,8 @@ ForceFeedbackEffect::ForceFeedbackEffect(Joystick* joystick)
 ForceFeedbackEffect::ForceFeedbackEffect(Joystick* joystick, char* filename)
     : m_joystick(joystick)
 {
-    if (!filename || !g_haptic)
-    {
-        if (filename)
-            dxTracer.trace("ForceFeedbackEffect: No haptic device for '%s'", filename);
+    if (!filename)
         return;
-    }
 
     // Extract effect name from filename
     const char* name = filename;
@@ -575,7 +693,31 @@ ForceFeedbackEffect::ForceFeedbackEffect(Joystick* joystick, char* filename)
     else if (lastBackslash)
         name = lastBackslash + 1;
 
-    dxTracer.trace("ForceFeedbackEffect: Creating effect for '%s'", name);
+    // For controller rumble, store the effect name for later use
+    if (g_useControllerRumble && g_gameController)
+    {
+        dxTracer.trace("ForceFeedbackEffect: Creating controller rumble effect for '%s'", name);
+        // Store rumble params encoded in a 32-bit value (portable for x86)
+        RumbleParams params = getRumbleParams(name);
+        // Encode: bits 0-7 = lowFreq/256, bits 8-15 = highFreq/256, bits 16-31 = duration/10
+        // This gives us: lowFreq range 0-65280, highFreq range 0-65280, duration 0-655350ms
+        Uint32 encoded = (static_cast<Uint32>(params.duration / 10) << 16) |
+                        (static_cast<Uint32>(params.highFreq / 256) << 8) |
+                        (static_cast<Uint32>(params.lowFreq / 256));
+        m_effects.push_back(reinterpret_cast<LPDIRECTINPUTEFFECT>(static_cast<uintptr_t>(encoded)));
+        dxTracer.trace("ForceFeedbackEffect: Stored rumble params low=%u high=%u dur=%u",
+                      params.lowFreq, params.highFreq, params.duration);
+        return;
+    }
+
+    // SDL_Haptic path for DirectInput force feedback devices
+    if (!g_haptic)
+    {
+        dxTracer.trace("ForceFeedbackEffect: No haptic device for '%s'", name);
+        return;
+    }
+
+    dxTracer.trace("ForceFeedbackEffect: Creating haptic effect for '%s'", name);
 
     SDL_HapticEffect effect;
     SDL_memset(&effect, 0, sizeof(effect));
@@ -708,7 +850,7 @@ ForceFeedbackEffect::ForceFeedbackEffect(Joystick* joystick, char* filename)
 ForceFeedbackEffect::~ForceFeedbackEffect()
 {
     stop();
-    if (g_haptic)
+    if (g_haptic && !g_useControllerRumble)
     {
         for (auto& effect : m_effects)
         {
@@ -721,7 +863,27 @@ ForceFeedbackEffect::~ForceFeedbackEffect()
 
 void ForceFeedbackEffect::play()
 {
-    if (!g_haptic || m_effects.empty())
+    if (m_effects.empty())
+        return;
+
+    // Controller rumble path
+    if (g_useControllerRumble && g_gameController)
+    {
+        // Decode rumble parameters (32-bit encoding: bits 0-7=lowFreq/256, 8-15=highFreq/256, 16-31=duration/10)
+        Uint32 encoded = static_cast<Uint32>(reinterpret_cast<uintptr_t>(m_effects[0]));
+        Uint16 lowFreq = static_cast<Uint16>((encoded & 0xFF) * 256);
+        Uint16 highFreq = static_cast<Uint16>(((encoded >> 8) & 0xFF) * 256);
+        Uint32 duration = static_cast<Uint32>((encoded >> 16) * 10);
+
+        if (SDL_GameControllerRumble(g_gameController, lowFreq, highFreq, duration) < 0)
+        {
+            dxTracer.trace("ForceFeedbackEffect::play: Controller rumble failed: %s", SDL_GetError());
+        }
+        return;
+    }
+
+    // SDL_Haptic path
+    if (!g_haptic)
         return;
 
     for (auto& effect : m_effects)
@@ -736,6 +898,14 @@ void ForceFeedbackEffect::play()
 
 void ForceFeedbackEffect::stop()
 {
+    // Controller rumble path - stop by setting intensity to 0
+    if (g_useControllerRumble && g_gameController)
+    {
+        SDL_GameControllerRumble(g_gameController, 0, 0, 0);
+        return;
+    }
+
+    // SDL_Haptic path
     if (!g_haptic)
         return;
 
@@ -748,6 +918,11 @@ void ForceFeedbackEffect::stop()
 
 void ForceFeedbackEffect::gain(UInt gain)
 {
+    // Controller rumble doesn't support gain adjustment at runtime
+    // The intensity is set when play() is called
+    if (g_useControllerRumble)
+        return;
+
     if (!g_haptic || m_effects.empty())
         return;
 
