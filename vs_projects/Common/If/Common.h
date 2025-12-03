@@ -40,11 +40,9 @@
 #include <cstring>
 #include <cctype>
 
-// Sleep replacement - in WASM this is a no-op (will need ASYNCIFY for real async sleep)
+// Sleep replacement using emscripten_sleep (requires ASYNCIFY)
 inline void Sleep(unsigned int ms) {
-    // No-op in WASM - the main loop will handle timing
-    // With ASYNCIFY, we could use emscripten_sleep(ms) here
-    (void)ms;
+    emscripten_sleep(ms);
 }
 
 // _strlwr replacement - lowercase string in place
