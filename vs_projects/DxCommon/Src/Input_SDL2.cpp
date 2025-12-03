@@ -355,7 +355,8 @@ Int InputManager::initialize(Window::Handle handle)
                 if (g_haptic)
                 {
                     m_joystick->FFcapable(true);
-                    dxTracer.trace("InputManager: Haptic feedback available");
+                    unsigned int supported = SDL_HapticQuery(g_haptic);
+                    dxTracer.trace("InputManager: Haptic feedback available (0x%X)", supported);
 
                     // Initialize rumble if supported
                     if (SDL_HapticRumbleSupported(g_haptic))
@@ -558,28 +559,178 @@ ForceFeedbackEffect::ForceFeedbackEffect(Joystick* joystick)
 ForceFeedbackEffect::ForceFeedbackEffect(Joystick* joystick, char* filename)
     : m_joystick(joystick)
 {
-    // Loading .ffe files not implemented for SDL2
-    // SDL2 haptic uses different effect definitions
-    if (filename)
+    if (!filename || !g_haptic)
     {
-        dxTracer.trace("ForceFeedbackEffect: Loading '%s' - .ffe files not supported in SDL2", filename);
+        if (filename)
+            dxTracer.trace("ForceFeedbackEffect: No haptic device for '%s'", filename);
+        return;
+    }
+
+    // Extract effect name from filename
+    const char* name = filename;
+    const char* lastSlash = strrchr(filename, '/');
+    const char* lastBackslash = strrchr(filename, '\\');
+    if (lastSlash && (!lastBackslash || lastSlash > lastBackslash))
+        name = lastSlash + 1;
+    else if (lastBackslash)
+        name = lastBackslash + 1;
+
+    dxTracer.trace("ForceFeedbackEffect: Creating effect for '%s'", name);
+
+    SDL_HapticEffect effect;
+    SDL_memset(&effect, 0, sizeof(effect));
+    unsigned int supported = SDL_HapticQuery(g_haptic);
+
+    bool effectCreated = false;
+    if (strstr(name, "crash") != nullptr && (supported & SDL_HAPTIC_SINE))
+    {
+        effect.type = SDL_HAPTIC_SINE;
+        effect.periodic.direction.type = SDL_HAPTIC_POLAR;
+        effect.periodic.period = 50;
+        effect.periodic.magnitude = 32767;
+        effect.periodic.length = 500;
+        effect.periodic.fade_length = 100;
+        effectCreated = true;
+    }
+    else if (strstr(name, "bumpleft") != nullptr && (supported & SDL_HAPTIC_SINE))
+    {
+        effect.type = SDL_HAPTIC_SINE;
+        effect.periodic.direction.type = SDL_HAPTIC_POLAR;
+        effect.periodic.direction.dir[0] = 27000;
+        effect.periodic.period = 40;
+        effect.periodic.magnitude = 24000;
+        effect.periodic.length = 150;
+        effect.periodic.fade_length = 50;
+        effectCreated = true;
+    }
+    else if (strstr(name, "bumpright") != nullptr && (supported & SDL_HAPTIC_SINE))
+    {
+        effect.type = SDL_HAPTIC_SINE;
+        effect.periodic.direction.type = SDL_HAPTIC_POLAR;
+        effect.periodic.direction.dir[0] = 9000;
+        effect.periodic.period = 40;
+        effect.periodic.magnitude = 24000;
+        effect.periodic.length = 150;
+        effect.periodic.fade_length = 50;
+        effectCreated = true;
+    }
+    else if (strstr(name, "curbleft") != nullptr && (supported & SDL_HAPTIC_SINE))
+    {
+        effect.type = SDL_HAPTIC_SINE;
+        effect.periodic.direction.type = SDL_HAPTIC_POLAR;
+        effect.periodic.direction.dir[0] = 27000;
+        effect.periodic.period = 116;
+        effect.periodic.magnitude = 16000;
+        effect.periodic.length = SDL_HAPTIC_INFINITY;
+        effectCreated = true;
+    }
+    else if (strstr(name, "curbright") != nullptr && (supported & SDL_HAPTIC_SINE))
+    {
+        effect.type = SDL_HAPTIC_SINE;
+        effect.periodic.direction.type = SDL_HAPTIC_POLAR;
+        effect.periodic.direction.dir[0] = 9000;
+        effect.periodic.period = 116;
+        effect.periodic.magnitude = 16000;
+        effect.periodic.length = SDL_HAPTIC_INFINITY;
+        effectCreated = true;
+    }
+    else if (strstr(name, "engine") != nullptr)
+    {
+        if (supported & SDL_HAPTIC_TRIANGLE)
+            effect.type = SDL_HAPTIC_TRIANGLE;
+        else if (supported & SDL_HAPTIC_SINE)
+            effect.type = SDL_HAPTIC_SINE;
+        else
+            return;
+        effect.periodic.direction.type = SDL_HAPTIC_POLAR;
+        effect.periodic.period = 100;
+        effect.periodic.magnitude = 8000;
+        effect.periodic.length = SDL_HAPTIC_INFINITY;
+        effectCreated = true;
+    }
+    else if (strstr(name, "spring") != nullptr && (supported & SDL_HAPTIC_SPRING))
+    {
+        effect.type = SDL_HAPTIC_SPRING;
+        effect.condition.direction.type = SDL_HAPTIC_POLAR;
+        effect.condition.length = SDL_HAPTIC_INFINITY;
+        effect.condition.right_sat[0] = 0xFFFF;
+        effect.condition.left_sat[0] = 0xFFFF;
+        effect.condition.right_coeff[0] = 0x4000;
+        effect.condition.left_coeff[0] = 0x4000;
+        effectCreated = true;
+    }
+    else if (strstr(name, "carstart") != nullptr && (supported & SDL_HAPTIC_SINE))
+    {
+        effect.type = SDL_HAPTIC_SINE;
+        effect.periodic.direction.type = SDL_HAPTIC_POLAR;
+        effect.periodic.period = 80;
+        effect.periodic.magnitude = 20000;
+        effect.periodic.length = 800;
+        effect.periodic.attack_length = 200;
+        effect.periodic.fade_length = 300;
+        effectCreated = true;
+    }
+    else if (strstr(name, "gravel") != nullptr && (supported & SDL_HAPTIC_SINE))
+    {
+        effect.type = SDL_HAPTIC_SINE;
+        effect.periodic.direction.type = SDL_HAPTIC_POLAR;
+        effect.periodic.period = 30;
+        effect.periodic.magnitude = 12000;
+        effect.periodic.length = SDL_HAPTIC_INFINITY;
+        effectCreated = true;
+    }
+    else if (supported & SDL_HAPTIC_SINE)
+    {
+        dxTracer.trace("ForceFeedbackEffect: Unknown '%s', using generic", name);
+        effect.type = SDL_HAPTIC_SINE;
+        effect.periodic.direction.type = SDL_HAPTIC_POLAR;
+        effect.periodic.period = 50;
+        effect.periodic.magnitude = 16000;
+        effect.periodic.length = 300;
+        effectCreated = true;
+    }
+
+    if (effectCreated)
+    {
+        int effectId = SDL_HapticNewEffect(g_haptic, &effect);
+        if (effectId >= 0)
+        {
+            m_effects.push_back(reinterpret_cast<LPDIRECTINPUTEFFECT>(static_cast<intptr_t>(effectId)));
+            dxTracer.trace("ForceFeedbackEffect: Created effect ID %d", effectId);
+        }
+        else
+        {
+            dxTracer.trace("ForceFeedbackEffect: Failed to create: %s", SDL_GetError());
+        }
     }
 }
 
 ForceFeedbackEffect::~ForceFeedbackEffect()
 {
     stop();
+    if (g_haptic)
+    {
+        for (auto& effect : m_effects)
+        {
+            int effectId = static_cast<int>(reinterpret_cast<intptr_t>(effect));
+            SDL_HapticDestroyEffect(g_haptic, effectId);
+        }
+    }
+    m_effects.clear();
 }
 
 void ForceFeedbackEffect::play()
 {
-    if (!g_haptic)
+    if (!g_haptic || m_effects.empty())
         return;
 
-    // Simple rumble effect as placeholder
-    if (SDL_HapticRumbleSupported(g_haptic))
+    for (auto& effect : m_effects)
     {
-        SDL_HapticRumblePlay(g_haptic, 0.5f, 200);
+        int effectId = static_cast<int>(reinterpret_cast<intptr_t>(effect));
+        if (SDL_HapticRunEffect(g_haptic, effectId, 1) < 0)
+        {
+            dxTracer.trace("ForceFeedbackEffect::play: Failed %d: %s", effectId, SDL_GetError());
+        }
     }
 }
 
@@ -588,17 +739,23 @@ void ForceFeedbackEffect::stop()
     if (!g_haptic)
         return;
 
-    SDL_HapticRumbleStop(g_haptic);
+    for (auto& effect : m_effects)
+    {
+        int effectId = static_cast<int>(reinterpret_cast<intptr_t>(effect));
+        SDL_HapticStopEffect(g_haptic, effectId);
+    }
 }
 
 void ForceFeedbackEffect::gain(UInt gain)
 {
-    if (!g_haptic)
+    if (!g_haptic || m_effects.empty())
         return;
 
-    // SDL2 uses gain per effect, not global
-    // This is a simplification
-    SDL_HapticSetGain(g_haptic, gain > 100 ? 100 : gain);
+    // DirectInput gain is 0-10000, SDL2 uses 0-100
+    int sdlGain = static_cast<int>(gain / 100);
+    if (sdlGain > 100) sdlGain = 100;
+    if (sdlGain < 0) sdlGain = 0;
+    SDL_HapticSetGain(g_haptic, sdlGain);
 }
 
 void ForceFeedbackEffect::addFileEffect(LPCDIFILEEFFECT fileEffect)
