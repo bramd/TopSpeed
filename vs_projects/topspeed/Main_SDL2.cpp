@@ -41,6 +41,18 @@ extern "C" {
     void syncFilesystemToIndexedDB()
     {
         EM_ASM(
+            // Copy files from root to /persist before syncing
+            var files = ['TopSpeed.bin', 'TopSpeed.cfg', 'highscore.cfg'];
+            for (var i = 0; i < files.length; i++) {
+                var filename = files[i];
+                try {
+                    var data = FS.readFile('/' + filename);
+                    FS.writeFile('/persist/' + filename, data);
+                    console.log('Copied ' + filename + ' to /persist/');
+                } catch (e) {
+                    // File doesn't exist, skip
+                }
+            }
             FS.syncfs(false, function(err) {
                 if (err) {
                     console.error('Failed to sync filesystem to IndexedDB:', err);
@@ -57,8 +69,15 @@ static void initializeIDBFS()
 {
     printf("Initializing IDBFS for persistent storage...\n");
     EM_ASM(
-        // Mount IDBFS on the current working directory
-        FS.mount(FS.filesystems.IDBFS || IDBFS, {}, '/');
+        // Create /persist directory for IDBFS (can't mount on / with preloaded content)
+        try {
+            FS.mkdir('/persist');
+        } catch (e) {
+            // Directory may already exist
+        }
+
+        // Mount IDBFS on /persist subdirectory
+        FS.mount(FS.filesystems.IDBFS || IDBFS, {}, '/persist');
 
         // Sync FROM IndexedDB to memory (populate = true)
         // Using Asyncify to make this synchronous
@@ -68,6 +87,18 @@ static void initializeIDBFS()
                     console.error('Failed to load from IndexedDB:', err);
                 } else {
                     console.log('Loaded persisted data from IndexedDB');
+                    // Copy persisted files from /persist to root
+                    var files = ['TopSpeed.bin', 'TopSpeed.cfg', 'highscore.cfg'];
+                    for (var i = 0; i < files.length; i++) {
+                        var filename = files[i];
+                        try {
+                            var data = FS.readFile('/persist/' + filename);
+                            FS.writeFile('/' + filename, data);
+                            console.log('Restored ' + filename + ' from /persist/');
+                        } catch (e) {
+                            // File doesn't exist in IndexedDB yet, skip
+                        }
+                    }
                 }
                 wakeUp();
             });
