@@ -1113,10 +1113,25 @@ void Sound::volume(Int value)
     if (!data)
         return;
 
-    // Convert 0-100 to 0.0-1.0
-    float vol = static_cast<float>(value) / 100.0f;
-    if (vol < 0.0f) vol = 0.0f;
-    if (vol > 1.0f) vol = 1.0f;
+    // Clamp to valid range
+    if (value < 0) value = 0;
+    if (value > 100) value = 100;
+
+    // Convert 0-100 to dB-based volume (matches DirectSound behavior)
+    // DirectSound uses DSBVOLUME_MIN (-10000 = -100dB) to DSBVOLUME_MAX (0 = 0dB)
+    // Game volume 0 = -100dB (silence), volume 100 = 0dB (full)
+    float vol;
+    if (value == 0)
+    {
+        vol = 0.0f;  // Complete silence
+    }
+    else
+    {
+        // Convert to dB attenuation: volume 100 = 0dB, volume 0 = -100dB
+        float attenuationDb = static_cast<float>(100 - value);  // 0 to 100 dB
+        // Convert dB to linear gain: gain = 10^(-dB/20)
+        vol = powf(10.0f, -attenuationDb / 20.0f);
+    }
 
     data->volume = vol;
 
@@ -1129,7 +1144,17 @@ Int Sound::volume()
     SDL2SoundData* data = GetSDL2Data(this);
     if (!data)
         return 0;
-    return static_cast<Int>(data->volume * 100.0f);
+
+    // Convert linear gain back to 0-100 scale (inverse of dB conversion)
+    if (data->volume <= 0.0f)
+        return 0;
+
+    // gain = 10^(-dB/20), so dB = -20 * log10(gain)
+    float attenuationDb = -20.0f * log10f(data->volume);
+    int value = 100 - static_cast<int>(attenuationDb + 0.5f);
+    if (value < 0) value = 0;
+    if (value > 100) value = 100;
+    return value;
 }
 
 //-----------------------------------------------------------------------------
