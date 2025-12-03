@@ -20,14 +20,14 @@ Mutex::~Mutex( )
 
 
 void
-Mutex::lock( )
+Mutex::enter( )
 {
-    ::EnterCriticalSection(&m_criticalSection); 
+    ::EnterCriticalSection(&m_criticalSection);
 }
 
 
 void
-Mutex::unlock( )
+Mutex::leave( )
 {
     ::LeaveCriticalSection(&m_criticalSection);
 }
