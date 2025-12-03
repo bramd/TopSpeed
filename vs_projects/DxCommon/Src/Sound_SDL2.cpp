@@ -286,7 +286,11 @@ public:
     static const int MAX_CHANNELS = 128;
     static const int DEVICE_FREQUENCY = 44100;
     static const int DEVICE_CHANNELS = 2;
-    static const int DEVICE_SAMPLES = 1024;
+#ifdef __EMSCRIPTEN__
+    static const int DEVICE_SAMPLES = 512;   // Lower latency for web (~12ms)
+#else
+    static const int DEVICE_SAMPLES = 1024;  // Standard buffer for native (~23ms)
+#endif
 
     static AudioMixer* instance()
     {
