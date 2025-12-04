@@ -8,7 +8,7 @@
 #include <time.h>
 #include <cstdlib>
 
-Int 
+Int
 random(Int max)
 {
     static Boolean firstrun = true;
@@ -17,5 +17,7 @@ random(Int max)
         ::srand( (unsigned)time( NULL ) );
         firstrun = false;
     }
+    if (max <= 0)
+        return 0;
     return (rand( ) % max);
 }

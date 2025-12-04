@@ -146,6 +146,15 @@ RaceSettings::read( )
         randomCustomTracks          = settingsFile.readInt( );
         randomCustomVehicles          = settingsFile.readInt( );
         singleRaceCustomVehicles          = settingsFile.readInt( );
+
+        // Validate critical values - if file was corrupted/truncated, reset to defaults
+        // readInt() returns -1 on failure, which can cause issues like random(0) divide by zero
+        if (nrOfLaps < 1 || nrOfLaps > 99)
+            nrOfLaps = 3;
+        if (nrOfComputers < 0 || nrOfComputers > 7)
+            nrOfComputers = 3;
+        if (difficulty < 0 || difficulty > 2)
+            difficulty = 0;
     }
 }
     
