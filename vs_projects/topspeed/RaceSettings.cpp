@@ -147,14 +147,68 @@ RaceSettings::read( )
         randomCustomVehicles          = settingsFile.readInt( );
         singleRaceCustomVehicles          = settingsFile.readInt( );
 
-        // Validate critical values - if file was corrupted/truncated, reset to defaults
-        // readInt() returns -1 on failure, which can cause issues like random(0) divide by zero
+        // Validate all values - if file was corrupted/truncated, reset to defaults
+        // readInt() returns -1 on failure, which causes issues:
+        // - random(0) divide by zero for nrOfComputers
+        // - Boolean settings interpret -1 as true (non-zero)
         if (nrOfLaps < 1 || nrOfLaps > 99)
             nrOfLaps = 3;
         if (nrOfComputers < 0 || nrOfComputers > 7)
             nrOfComputers = 3;
         if (difficulty < 0 || difficulty > 2)
             difficulty = 0;
+        // Boolean settings (0 or 1)
+        if (useJoystick < 0 || useJoystick > 1)
+            useJoystick = 0;
+        if (forceFeedback < 0 || forceFeedback > 1)
+            forceFeedback = 0;
+        if (threeD < 0 || threeD > 1)
+            threeD = 1;
+        if (hardwareAcceleration < 0 || hardwareAcceleration > 1)
+            hardwareAcceleration = 1;
+        if (reverseStereo < 0 || reverseStereo > 1)
+            reverseStereo = 0;
+        if (randomCustomTracks < 0 || randomCustomTracks > 1)
+            randomCustomTracks = 0;
+        if (randomCustomVehicles < 0 || randomCustomVehicles > 1)
+            randomCustomVehicles = 0;
+        if (singleRaceCustomVehicles < 0 || singleRaceCustomVehicles > 1)
+            singleRaceCustomVehicles = 0;
+        // Multi-value settings
+        if (automaticInfo < 0 || automaticInfo > 2)
+            automaticInfo = 2;
+        if (copilot < 0 || copilot > 2)
+            copilot = 2;
+        if (curveAnnouncement < 0 || curveAnnouncement > 1)
+            curveAnnouncement = 1;
+        // Keyboard key codes - if corrupted (255 from -1 cast), reset to defaults
+        // Valid DIK codes are roughly 0x00-0xED
+        if (keyLeft > 0xED)
+            keyLeft = KeyLeft;
+        if (keyRight > 0xED)
+            keyRight = KeyRight;
+        if (keyThrottle > 0xED)
+            keyThrottle = KeyUp;
+        if (keyBrake > 0xED)
+            keyBrake = KeyDown;
+        if (keyGearUp > 0xED)
+            keyGearUp = KeyShiftUp;
+        if (keyGearDown > 0xED)
+            keyGearDown = KeyShiftDown;
+        if (keyHorn > 0xED)
+            keyHorn = KeySpace;
+        if (keyRequestInfo > 0xED)
+            keyRequestInfo = KeyTab;
+        if (keyCurrentGear > 0xED)
+            keyCurrentGear = KeyQ;
+        if (keyCurrentLapNr > 0xED)
+            keyCurrentLapNr = KeyW;
+        if (keyCurrentRacePerc > 0xED)
+            keyCurrentRacePerc = KeyE;
+        if (keyCurrentLapPerc > 0xED)
+            keyCurrentLapPerc = KeyR;
+        if (keyCurrentRaceTime > 0xED)
+            keyCurrentRaceTime = KeyT;
     }
 }
     
